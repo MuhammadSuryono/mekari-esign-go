@@ -1,0 +1,54 @@
+app:
+  name: "mekari-esign"
+  port: 8080
+  env: "development"
+  base_url: "http://localhost:8080"
+
+mekari:
+  auth_type: "oauth2"  # "oauth2" or "hmac"
+  base_url: "https://sandbox-api.mekari.com"
+  sso_base_url: "https://sandbox-sso.mekari.com"
+  auth_url: "https://sandbox-account.mekari.com"
+  timeout: 30
+  oauth2:
+    client_id: "YOUR_CLIENT_ID"
+    client_secret: "YOUR_CLIENT_SECRET"
+  hmac:
+    client_id: "YOUR_HMAC_CLIENT_ID"
+    client_secret: "YOUR_HMAC_CLIENT_SECRET"
+
+database:
+  driver: "postgres"
+  host: "localhost"
+  port: 5432
+  user: "postgres"
+  password: "your_password"
+  dbname: "mekari_esign"
+  sslmode: "disable"
+
+redis:
+  host: "localhost"
+  port: 6379
+  password: ""
+  db: 0
+
+oauth:
+  refresh_token_age_days: 30
+
+document:
+  base_path: "./documents"
+  ready_folder: "ready"
+  progress_folder: "progress"
+  finish_folder: "finish"
+  file_prefix: ""
+  file_extension: ".pdf"
+
+logging:
+  level: "debug"
+  format: "json"
+
+# Auto-update configuration (for Windows service)
+# Update server will check GitHub releases automatically
+# To disable auto-update, remove the scheduled task:
+#   schtasks /delete /tn "MekariEsignUpdater" /f
+

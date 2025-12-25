@@ -1,0 +1,263 @@
+# GitHub Actions workflow for building and releasing Mekari E-Sign
+# This workflow:
+# 1. Builds Windows executable on tag push
+# 2. Creates GitHub release
+# 3. Uploads release assets for auto-update
+
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Get version from tag
+        id: get_version
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Build Windows executable
+        shell: bash
+        run: |
+          VERSION=${{ steps.get_version.outputs.VERSION }}
+          GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build \
+            -ldflags "-X mekari-esign/updater.Version=${VERSION} -s -w" \
+            -o bin/windows/mekari-esign.exe \
+            ./cmd/service/main.go
+
+      - name: Create release package
+        shell: bash
+        run: |
+          mkdir -p dist
+          cp bin/windows/mekari-esign.exe dist/
+          cp config.example.yml dist/config.yml
+          cd dist
+          7z a -tzip mekari-esign-windows-amd64.zip mekari-esign.exe config.yml
+
+      - name: Calculate checksum
+        shell: bash
+        run: |
+          cd dist
+          sha256sum mekari-esign-windows-amd64.zip > mekari-esign-windows-amd64.zip.sha256
+          cat mekari-esign-windows-amd64.zip.sha256
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-release
+          path: |
+            dist/mekari-esign-windows-amd64.zip
+            dist/mekari-esign-windows-amd64.zip.sha256
+
+  build-installer:
+    name: Build Windows Installer
+    runs-on: windows-latest
+    needs: build-windows
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download Windows build
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-release
+          path: dist
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Get version from tag
+        id: get_version
+        shell: bash
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Extract executable
+        shell: bash
+        run: |
+          mkdir -p bin/windows
+          cd dist
+          7z x mekari-esign-windows-amd64.zip -o../bin/windows -y
+
+      - name: Download Redis
+        shell: powershell
+        run: |
+          $REDIS_URL = "https://github.com/tporadowski/redis/releases/download/v5.0.14.1/Redis-x64-5.0.14.1.zip"
+          New-Item -ItemType Directory -Force -Path embedded\redis-win | Out-Null
+          Invoke-WebRequest -Uri $REDIS_URL -OutFile redis.zip
+          Expand-Archive -Path redis.zip -DestinationPath embedded\redis-win -Force
+          Remove-Item redis.zip
+
+      - name: Download PostgreSQL
+        shell: powershell
+        run: |
+          $PG_URL = "https://get.enterprisedb.com/postgresql/postgresql-15.4-1-windows-x64-binaries.zip"
+          New-Item -ItemType Directory -Force -Path embedded | Out-Null
+          Invoke-WebRequest -Uri $PG_URL -OutFile pgsql.zip
+          Expand-Archive -Path pgsql.zip -DestinationPath embedded -Force
+          Rename-Item embedded\pgsql embedded\pgsql-portable
+          Remove-Item pgsql.zip
+
+      - name: Download NSSM
+        shell: powershell
+        run: |
+          $NSSM_URL = "https://nssm.cc/release/nssm-2.24.zip"
+          New-Item -ItemType Directory -Force -Path tools | Out-Null
+          Invoke-WebRequest -Uri $NSSM_URL -OutFile nssm.zip
+          Expand-Archive -Path nssm.zip -DestinationPath nssm-temp -Force
+          Copy-Item nssm-temp\nssm-2.24\win64\nssm.exe tools\nssm.exe
+          Remove-Item nssm.zip
+          Remove-Item nssm-temp -Recurse
+
+      - name: Install Inno Setup
+        shell: powershell
+        run: |
+          choco install innosetup -y
+
+      - name: Update version in setup.iss
+        shell: powershell
+        run: |
+          $content = Get-Content installer\inno-setup\setup.iss -Raw
+          $content = $content -replace '#define MyAppVersion ".*"', "#define MyAppVersion `"${{ steps.get_version.outputs.VERSION }}`""
+          Set-Content installer\inno-setup\setup.iss -Value $content
+
+      - name: Build installer
+        shell: cmd
+        run: |
+          "C:\Program Files (x86)\Inno Setup 6\ISCC.exe" installer\inno-setup\setup.iss
+
+      - name: Upload installer
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-installer
+          path: dist/MekariEsignSetup-*.exe
+
+  create-release:
+    name: Create GitHub Release
+    runs-on: ubuntu-latest
+    needs: [build-windows, build-installer]
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Get version from tag
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Download Windows build
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-release
+          path: dist
+
+      - name: Download Windows installer
+        uses: actions/download-artifact@v4
+        with:
+          name: windows-installer
+          path: dist
+
+      - name: List artifacts
+        run: ls -la dist/
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          name: Mekari E-Sign v${{ steps.get_version.outputs.VERSION }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+          files: |
+            dist/mekari-esign-windows-amd64.zip
+            dist/mekari-esign-windows-amd64.zip.sha256
+            dist/MekariEsignSetup-*.exe
+          body: |
+            ## Installation
+
+            ### Option 1: Full Installer (Recommended)
+            Download and run `MekariEsignSetup-${{ steps.get_version.outputs.VERSION }}.exe` for a complete installation including:
+            - Mekari E-Sign Service
+            - Redis (embedded)
+            - PostgreSQL (embedded)
+            - Auto-start configuration
+            - Scheduled daily updates
+
+            ### Option 2: Manual Installation
+            1. Download `mekari-esign-windows-amd64.zip`
+            2. Extract to your desired location
+            3. Configure `config.yml`
+            4. Run `mekari-esign.exe -install` as Administrator
+
+            ## Verify Download
+            ```
+            sha256sum -c mekari-esign-windows-amd64.zip.sha256
+            ```
+
+            ## Auto-Update
+            Existing installations will automatically check for updates daily at 3:00 AM.
+            To manually update, run: `mekari-esign.exe -update`
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Build for other platforms (optional - for future expansion)
+  build-linux:
+    name: Build Linux
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+
+      - name: Get version from tag
+        id: get_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Build Linux executable
+        run: |
+          VERSION=${{ steps.get_version.outputs.VERSION }}
+          CGO_ENABLED=0 go build \
+            -ldflags "-X mekari-esign/updater.Version=${VERSION} -s -w" \
+            -o bin/linux/mekari-esign \
+            ./cmd/service/main.go
+
+      - name: Create release package
+        run: |
+          mkdir -p dist
+          cp bin/linux/mekari-esign dist/
+          cp config.example.yml dist/config.yml
+          cd dist
+          tar -czvf mekari-esign-linux-amd64.tar.gz mekari-esign config.yml
+          sha256sum mekari-esign-linux-amd64.tar.gz > mekari-esign-linux-amd64.tar.gz.sha256
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-release
+          path: |
+            dist/mekari-esign-linux-amd64.tar.gz
+            dist/mekari-esign-linux-amd64.tar.gz.sha256
+
