@@ -99,34 +99,37 @@ jobs:
           7z x mekari-esign-windows-amd64.zip -o../bin/windows -y
 
       - name: Download Redis
-        shell: powershell
+        shell: bash
         run: |
-          $REDIS_URL = "https://github.com/tporadowski/redis/releases/download/v5.0.14.1/Redis-x64-5.0.14.1.zip"
-          New-Item -ItemType Directory -Force -Path embedded\redis-win | Out-Null
-          Invoke-WebRequest -Uri $REDIS_URL -OutFile redis.zip
-          Expand-Archive -Path redis.zip -DestinationPath embedded\redis-win -Force
-          Remove-Item redis.zip
+          REDIS_URL="https://github.com/tporadowski/redis/releases/download/v5.0.14.1/Redis-x64-5.0.14.1.zip"
+          mkdir -p embedded/redis-win
+          echo "Downloading Redis..."
+          curl -L -o redis.zip "$REDIS_URL" --progress-bar --retry 3 --retry-delay 5
+          7z x redis.zip -oembedded/redis-win -y
+          rm redis.zip
 
       - name: Download PostgreSQL
-        shell: powershell
+        shell: bash
         run: |
-          $PG_URL = "https://get.enterprisedb.com/postgresql/postgresql-15.4-1-windows-x64-binaries.zip"
-          New-Item -ItemType Directory -Force -Path embedded | Out-Null
-          Invoke-WebRequest -Uri $PG_URL -OutFile pgsql.zip
-          Expand-Archive -Path pgsql.zip -DestinationPath embedded -Force
-          Rename-Item embedded\pgsql embedded\pgsql-portable
-          Remove-Item pgsql.zip
+          PG_URL="https://get.enterprisedb.com/postgresql/postgresql-15.4-1-windows-x64-binaries.zip"
+          mkdir -p embedded
+          echo "Downloading PostgreSQL (this may take a while ~200MB)..."
+          curl -L -o pgsql.zip "$PG_URL" --progress-bar --retry 3 --retry-delay 5 --connect-timeout 60 --max-time 600
+          echo "Extracting PostgreSQL..."
+          7z x pgsql.zip -oembedded -y
+          mv embedded/pgsql embedded/pgsql-portable
+          rm pgsql.zip
 
       - name: Download NSSM
-        shell: powershell
+        shell: bash
         run: |
-          $NSSM_URL = "https://nssm.cc/release/nssm-2.24.zip"
-          New-Item -ItemType Directory -Force -Path tools | Out-Null
-          Invoke-WebRequest -Uri $NSSM_URL -OutFile nssm.zip
-          Expand-Archive -Path nssm.zip -DestinationPath nssm-temp -Force
-          Copy-Item nssm-temp\nssm-2.24\win64\nssm.exe tools\nssm.exe
-          Remove-Item nssm.zip
-          Remove-Item nssm-temp -Recurse
+          NSSM_URL="https://nssm.cc/release/nssm-2.24.zip"
+          mkdir -p tools
+          echo "Downloading NSSM..."
+          curl -L -o nssm.zip "$NSSM_URL" --progress-bar --retry 3 --retry-delay 5
+          7z x nssm.zip -onssm-temp -y
+          cp nssm-temp/nssm-2.24/win64/nssm.exe tools/nssm.exe
+          rm -rf nssm.zip nssm-temp
 
       - name: Install Inno Setup
         shell: powershell
