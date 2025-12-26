@@ -44,8 +44,8 @@ $PGSQL_VERSION = "15.4-1"
 $PGSQL_URL = "https://get.enterprisedb.com/postgresql/postgresql-${PGSQL_VERSION}-windows-x64-binaries.zip"
 
 $NSSM_VERSION = "2.24"
-# Using GitHub mirror since nssm.cc is unreliable
-$NSSM_URL = "https://github.com/kirillkovalenko/nssm/releases/download/v2.24-101-g897c7ad/nssm-2.24-101-g897c7ad.zip"
+# Primary: nssm.cc, Fallback: Chocolatey
+$NSSM_URL = "https://nssm.cc/release/nssm-${NSSM_VERSION}.zip"
 
 # =============================================================================
 # Helper Functions
@@ -247,36 +247,66 @@ if (-not $SkipDownloads) {
     $NSSM_EXE = Join-Path $TOOLS_DIR "nssm.exe"
     
     if (-not (Test-Path $NSSM_EXE)) {
-        $nssmZip = Join-Path $env:TEMP "nssm.zip"
+        $nssmInstalled = $false
         
-        Download-File -Url $NSSM_URL -OutFile $nssmZip
+        # Method 1: Try downloading from nssm.cc
+        try {
+            Write-Host "  Trying to download from nssm.cc..."
+            $nssmZip = Join-Path $env:TEMP "nssm.zip"
+            
+            $ProgressPreference = 'SilentlyContinue'
+            Invoke-WebRequest -Uri $NSSM_URL -OutFile $nssmZip -TimeoutSec 30 -ErrorAction Stop
+            
+            # Verify file size (should be > 200KB)
+            if ((Get-Item $nssmZip).Length -gt 200000) {
+                $tempExtract = Join-Path $env:TEMP "nssm-extract"
+                Extract-Zip -ZipPath $nssmZip -DestPath $tempExtract
+                
+                $nssmExeSource = Get-ChildItem -Path $tempExtract -Recurse -Filter "nssm.exe" | 
+                                 Where-Object { $_.Directory.Name -eq "win64" } | 
+                                 Select-Object -First 1
+                
+                if (-not $nssmExeSource) {
+                    $nssmExeSource = Get-ChildItem -Path $tempExtract -Recurse -Filter "nssm.exe" | 
+                                     Select-Object -First 1
+                }
+                
+                if ($nssmExeSource) {
+                    Copy-Item $nssmExeSource.FullName -Destination $NSSM_EXE
+                    $nssmInstalled = $true
+                }
+                
+                Remove-Item $tempExtract -Recurse -Force -ErrorAction SilentlyContinue
+            }
+            Remove-Item $nssmZip -Force -ErrorAction SilentlyContinue
+        } catch {
+            Write-Warn "Download from nssm.cc failed: $_"
+        }
         
-        # Extract
-        $tempExtract = Join-Path $env:TEMP "nssm-extract"
-        Extract-Zip -ZipPath $nssmZip -DestPath $tempExtract
-        
-        # Copy nssm.exe (try win64 first, then any nssm.exe)
-        $nssmExeSource = Get-ChildItem -Path $tempExtract -Recurse -Filter "nssm.exe" | 
-                         Where-Object { $_.Directory.Name -eq "win64" } | 
-                         Select-Object -First 1
-        
-        if (-not $nssmExeSource) {
-            # Fallback: find any nssm.exe
-            $nssmExeSource = Get-ChildItem -Path $tempExtract -Recurse -Filter "nssm.exe" | 
+        # Method 2: Fallback to Chocolatey
+        if (-not $nssmInstalled) {
+            Write-Host "  Trying Chocolatey fallback..."
+            if (Get-Command choco -ErrorAction SilentlyContinue) {
+                choco install nssm -y --no-progress 2>$null
+                
+                $chocoNssm = Get-ChildItem -Path "$env:ChocolateyInstall\lib\nssm*" -Recurse -Filter "nssm.exe" -ErrorAction SilentlyContinue | 
+                             Where-Object { $_.Directory.Name -eq "win64" } | 
                              Select-Object -First 1
+                
+                if ($chocoNssm) {
+                    Copy-Item $chocoNssm.FullName -Destination $NSSM_EXE
+                    $nssmInstalled = $true
+                }
+            } else {
+                Write-Warn "Chocolatey not available"
+            }
         }
         
-        if ($nssmExeSource) {
-            Copy-Item $nssmExeSource.FullName -Destination $NSSM_EXE
+        if ($nssmInstalled) {
+            Write-Success "NSSM installed!"
         } else {
-            Write-Warn "NSSM executable not found in archive!"
+            Write-Warn "NSSM installation failed! Installer may not work properly."
         }
-        
-        # Cleanup
-        Remove-Item $nssmZip -Force -ErrorAction SilentlyContinue
-        Remove-Item $tempExtract -Recurse -Force -ErrorAction SilentlyContinue
-        
-        Write-Success "NSSM downloaded!"
     } else {
         Write-Host "  NSSM already exists, skipping download."
     }
