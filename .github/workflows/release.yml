@@ -120,38 +120,31 @@ jobs:
           mv embedded/pgsql embedded/pgsql-portable
           rm pgsql.zip
 
-      - name: Download NSSM
-        shell: bash
+      - name: Install NSSM via Chocolatey
+        shell: powershell
         run: |
-          # Using GitHub mirror since nssm.cc is unreliable
-          NSSM_URL="https://github.com/kirillkovalenko/nssm/releases/download/v2.24-101-g897c7ad/nssm-2.24-101-g897c7ad.zip"
-          mkdir -p tools
-          echo "Downloading NSSM from GitHub mirror..."
-          curl -L -o nssm.zip "$NSSM_URL" --progress-bar --retry 3 --retry-delay 5 --fail
+          Write-Host "Installing NSSM via Chocolatey..."
+          choco install nssm -y --no-progress
           
-          # Verify download succeeded
-          if [ ! -s nssm.zip ] || [ $(stat -c%s nssm.zip 2>/dev/null || stat -f%z nssm.zip) -lt 1000 ]; then
-            echo "ERROR: NSSM download failed or file too small"
-            exit 1
-          fi
-          
-          7z x nssm.zip -onssm-temp -y
-          
-          # Find and copy nssm.exe (handle different folder structures)
-          NSSM_EXE=$(find nssm-temp -name "nssm.exe" -path "*/win64/*" | head -1)
-          if [ -z "$NSSM_EXE" ]; then
-            NSSM_EXE=$(find nssm-temp -name "nssm.exe" | head -1)
-          fi
-          
-          if [ -n "$NSSM_EXE" ]; then
-            cp "$NSSM_EXE" tools/nssm.exe
-            echo "NSSM installed successfully"
-          else
-            echo "ERROR: nssm.exe not found in archive"
-            exit 1
-          fi
-          
-          rm -rf nssm.zip nssm-temp
+          # Copy to tools directory for installer
+          New-Item -ItemType Directory -Force -Path tools | Out-Null
+          $nssmPath = (Get-Command nssm -ErrorAction SilentlyContinue).Source
+          if ($nssmPath) {
+            Copy-Item $nssmPath -Destination tools\nssm.exe
+            Write-Host "NSSM installed successfully: $nssmPath"
+          } else {
+            # Fallback: find in chocolatey lib
+            $nssmExe = Get-ChildItem -Path "$env:ChocolateyInstall\lib\nssm*" -Recurse -Filter "nssm.exe" | 
+                       Where-Object { $_.Directory.Name -eq "win64" } | 
+                       Select-Object -First 1
+            if ($nssmExe) {
+              Copy-Item $nssmExe.FullName -Destination tools\nssm.exe
+              Write-Host "NSSM copied from: $($nssmExe.FullName)"
+            } else {
+              Write-Error "NSSM not found!"
+              exit 1
+            }
+          }
 
       - name: Install Inno Setup
         shell: powershell
