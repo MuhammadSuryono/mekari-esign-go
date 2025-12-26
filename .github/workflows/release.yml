@@ -123,12 +123,34 @@ jobs:
       - name: Download NSSM
         shell: bash
         run: |
-          NSSM_URL="https://nssm.cc/release/nssm-2.24.zip"
+          # Using GitHub mirror since nssm.cc is unreliable
+          NSSM_URL="https://github.com/kirillkovalenko/nssm/releases/download/v2.24-101-g897c7ad/nssm-2.24-101-g897c7ad.zip"
           mkdir -p tools
-          echo "Downloading NSSM..."
-          curl -L -o nssm.zip "$NSSM_URL" --progress-bar --retry 3 --retry-delay 5
+          echo "Downloading NSSM from GitHub mirror..."
+          curl -L -o nssm.zip "$NSSM_URL" --progress-bar --retry 3 --retry-delay 5 --fail
+          
+          # Verify download succeeded
+          if [ ! -s nssm.zip ] || [ $(stat -c%s nssm.zip 2>/dev/null || stat -f%z nssm.zip) -lt 1000 ]; then
+            echo "ERROR: NSSM download failed or file too small"
+            exit 1
+          fi
+          
           7z x nssm.zip -onssm-temp -y
-          cp nssm-temp/nssm-2.24/win64/nssm.exe tools/nssm.exe
+          
+          # Find and copy nssm.exe (handle different folder structures)
+          NSSM_EXE=$(find nssm-temp -name "nssm.exe" -path "*/win64/*" | head -1)
+          if [ -z "$NSSM_EXE" ]; then
+            NSSM_EXE=$(find nssm-temp -name "nssm.exe" | head -1)
+          fi
+          
+          if [ -n "$NSSM_EXE" ]; then
+            cp "$NSSM_EXE" tools/nssm.exe
+            echo "NSSM installed successfully"
+          else
+            echo "ERROR: nssm.exe not found in archive"
+            exit 1
+          fi
+          
           rm -rf nssm.zip nssm-temp
 
       - name: Install Inno Setup

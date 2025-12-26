@@ -44,7 +44,8 @@ $PGSQL_VERSION = "15.4-1"
 $PGSQL_URL = "https://get.enterprisedb.com/postgresql/postgresql-${PGSQL_VERSION}-windows-x64-binaries.zip"
 
 $NSSM_VERSION = "2.24"
-$NSSM_URL = "https://nssm.cc/release/nssm-${NSSM_VERSION}.zip"
+# Using GitHub mirror since nssm.cc is unreliable
+$NSSM_URL = "https://github.com/kirillkovalenko/nssm/releases/download/v2.24-101-g897c7ad/nssm-2.24-101-g897c7ad.zip"
 
 # =============================================================================
 # Helper Functions
@@ -254,13 +255,21 @@ if (-not $SkipDownloads) {
         $tempExtract = Join-Path $env:TEMP "nssm-extract"
         Extract-Zip -ZipPath $nssmZip -DestPath $tempExtract
         
-        # Copy nssm.exe
+        # Copy nssm.exe (try win64 first, then any nssm.exe)
         $nssmExeSource = Get-ChildItem -Path $tempExtract -Recurse -Filter "nssm.exe" | 
                          Where-Object { $_.Directory.Name -eq "win64" } | 
                          Select-Object -First 1
         
+        if (-not $nssmExeSource) {
+            # Fallback: find any nssm.exe
+            $nssmExeSource = Get-ChildItem -Path $tempExtract -Recurse -Filter "nssm.exe" | 
+                             Select-Object -First 1
+        }
+        
         if ($nssmExeSource) {
             Copy-Item $nssmExeSource.FullName -Destination $NSSM_EXE
+        } else {
+            Write-Warn "NSSM executable not found in archive!"
         }
         
         # Cleanup
