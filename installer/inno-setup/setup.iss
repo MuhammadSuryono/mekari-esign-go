@@ -45,7 +45,6 @@ UninstallDisplayName={#MyAppName}
 
 [Languages]
 Name: "english"; MessagesFile: "compiler:Default.isl"
-Name: "indonesian"; MessagesFile: "compiler:Languages\Indonesian.isl"
 
 [Types]
 Name: "full"; Description: "Full installation (recommended)"
