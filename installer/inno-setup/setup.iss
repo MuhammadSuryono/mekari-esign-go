@@ -117,7 +117,7 @@ Filename: "net.exe"; Parameters: "start MekariRedis"; StatusMsg: "Starting Redis
 Filename: "net.exe"; Parameters: "start MekariPostgres"; StatusMsg: "Starting PostgreSQL..."; Flags: runhidden waituntilterminated; Components: postgres
 
 ; Wait for databases to start
-Filename: "timeout.exe"; Parameters: "/t 5 /nobreak"; StatusMsg: "Waiting for databases..."; Flags: runhidden waituntilterminated; Components: postgres redis
+Filename: "timeout.exe"; Parameters: "/t 5 /nobreak"; StatusMsg: "Waiting for databases..."; Flags: runhidden waituntilterminated; Components: postgres
 
 ; Create database
 Filename: "{app}\scripts\create-database.bat"; Parameters: """{app}"""; StatusMsg: "Creating application database..."; Flags: runhidden waituntilterminated; Components: postgres
@@ -187,8 +187,8 @@ end;
 procedure CurStepChanged(CurStep: TSetupStep);
 var
   ConfigFile: String;
-  ConfigContent: AnsiString;
-  ConfigStr: String;
+  Lines: TArrayOfString;
+  I: Integer;
   AppPort: String;
   PgPassword: String;
 begin
@@ -197,26 +197,28 @@ begin
     // Update configuration file with user-provided values
     ConfigFile := ExpandConstant('{app}\config.yml');
     
-    if LoadStringFromFile(ConfigFile, ConfigContent) then
+    if LoadStringsFromFile(ConfigFile, Lines) then
     begin
-      // Convert AnsiString to String for manipulation
-      ConfigStr := String(ConfigContent);
-      
-      // Update port
       AppPort := PortPage.Values[0];
-      if AppPort <> '' then
-        StringChangeEx(ConfigStr, 'port: 8080', 'port: ' + AppPort, True);
-      
-      // Update PostgreSQL password
       if WizardIsComponentSelected('postgres') then
+        PgPassword := ConfigPage.Values[0]
+      else
+        PgPassword := '';
+      
+      // Update values in config
+      for I := 0 to GetArrayLength(Lines) - 1 do
       begin
-        PgPassword := ConfigPage.Values[0];
-        if PgPassword <> '' then
-          StringChangeEx(ConfigStr, 'password: "your_password"', 'password: "' + PgPassword + '"', True);
+        // Update port
+        if (AppPort <> '') and (Pos('port: 8080', Lines[I]) > 0) then
+          Lines[I] := '  port: ' + AppPort;
+        
+        // Update PostgreSQL password  
+        if (PgPassword <> '') and (Pos('password: "your_password"', Lines[I]) > 0) then
+          Lines[I] := '  password: "' + PgPassword + '"';
       end;
       
       // Save back to file
-      SaveStringToFile(ConfigFile, AnsiString(ConfigStr), False);
+      SaveStringsToFile(ConfigFile, Lines, False);
     end;
   end;
 end;
