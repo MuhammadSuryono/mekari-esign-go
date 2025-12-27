@@ -14,8 +14,11 @@ set REDIS_DATA=%INSTALL_DIR%\data\redis
 set LOG_DIR=%INSTALL_DIR%\logs
 
 echo Install directory: %INSTALL_DIR%
-echo NSSM path: %NSSM%
 echo Redis directory: %REDIS_DIR%
+
+:: Create directories
+if not exist "%REDIS_DATA%" mkdir "%REDIS_DATA%"
+if not exist "%LOG_DIR%" mkdir "%LOG_DIR%"
 
 :: Create redis.conf if not exists
 if not exist "%REDIS_DIR%\redis.conf" (
@@ -28,19 +31,42 @@ if not exist "%REDIS_DIR%\redis.conf" (
         echo dir %REDIS_DATA:\=/%
         echo appendonly yes
         echo appendfilename "appendonly.aof"
-        echo logfile %LOG_DIR:\=/%/redis.log
         echo loglevel notice
     ) > "%REDIS_DIR%\redis.conf"
 )
 
-:: Create data directory
-if not exist "%REDIS_DATA%" mkdir "%REDIS_DATA%"
+:: Check if NSSM exists, if not try to find or install
+if not exist "%NSSM%" (
+    echo NSSM not found at %NSSM%
+    
+    :: Try to find nssm in PATH (installed via chocolatey)
+    where nssm >nul 2>&1
+    if %errorlevel% equ 0 (
+        for /f "tokens=*" %%i in ('where nssm') do set NSSM=%%i
+        echo Found NSSM at: !NSSM!
+    ) else (
+        echo NSSM not found. Attempting to install via Chocolatey...
+        where choco >nul 2>&1
+        if %errorlevel% equ 0 (
+            choco install nssm -y --no-progress
+            for /f "tokens=*" %%i in ('where nssm 2^>nul') do set NSSM=%%i
+        )
+        
+        if not exist "!NSSM!" (
+            echo ERROR: NSSM not available. Please install manually:
+            echo   choco install nssm -y
+            exit /b 1
+        )
+    )
+)
 
-:: Check if service already exists
+echo Using NSSM: %NSSM%
+
+:: Remove existing service if exists
 sc query MekariRedis >nul 2>&1
 if %errorlevel% equ 0 (
-    echo Redis service already exists. Removing old service...
-    "%NSSM%" stop MekariRedis >nul 2>&1
+    echo Removing existing Redis service...
+    net stop MekariRedis >nul 2>&1
     "%NSSM%" remove MekariRedis confirm >nul 2>&1
     timeout /t 2 /nobreak >nul
 )
@@ -63,7 +89,11 @@ if %errorlevel% neq 0 (
 "%NSSM%" set MekariRedis AppStderr "%LOG_DIR%\redis-stderr.log"
 "%NSSM%" set MekariRedis AppRotateFiles 1
 "%NSSM%" set MekariRedis AppRotateBytes 10485760
+"%NSSM%" set MekariRedis AppExit Default Restart
+"%NSSM%" set MekariRedis AppRestartDelay 3000
 
 echo Redis service installed successfully!
-exit /b 0
+echo Starting Redis service...
+net start MekariRedis
 
+exit /b 0

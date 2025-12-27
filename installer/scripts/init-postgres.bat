@@ -10,23 +10,37 @@ echo ============================================
 
 set PG_BIN=%INSTALL_DIR%\pgsql\bin
 set PG_DATA=%INSTALL_DIR%\data\postgres
+set LOG_DIR=%INSTALL_DIR%\logs
 
 echo Install directory: %INSTALL_DIR%
 echo PostgreSQL binaries: %PG_BIN%
 echo Data directory: %PG_DATA%
 
+:: Create directories
+if not exist "%PG_DATA%" mkdir "%PG_DATA%"
+if not exist "%LOG_DIR%" mkdir "%LOG_DIR%"
+
 :: Check if already initialized
 if exist "%PG_DATA%\PG_VERSION" (
-    echo PostgreSQL data directory already exists. Skipping initialization.
+    echo PostgreSQL data directory already initialized.
+    echo Skipping initialization.
     exit /b 0
 )
 
-:: Create data directory
-if not exist "%PG_DATA%" mkdir "%PG_DATA%"
+:: Set permissions on data directory
+echo Setting directory permissions...
+icacls "%PG_DATA%" /grant Everyone:F /T >nul 2>&1
+
+:: Create password file for non-interactive init
+set PWFILE=%TEMP%\pgpass.txt
+echo postgres123> "%PWFILE%"
 
 :: Initialize database
 echo Initializing PostgreSQL data directory...
-"%PG_BIN%\initdb.exe" -D "%PG_DATA%" -U postgres -E UTF8 -A md5 --pwfile=NUL
+"%PG_BIN%\initdb.exe" -D "%PG_DATA%" -U postgres -E UTF8 -A md5 --pwfile="%PWFILE%"
+
+:: Clean up password file
+del "%PWFILE%" >nul 2>&1
 
 if %errorlevel% neq 0 (
     echo ERROR: Failed to initialize PostgreSQL
@@ -36,19 +50,19 @@ if %errorlevel% neq 0 (
 :: Configure PostgreSQL
 echo Configuring PostgreSQL...
 
-:: Update postgresql.conf
+:: Append custom settings to postgresql.conf
 echo.>> "%PG_DATA%\postgresql.conf"
-echo # Custom settings for Mekari E-Sign >> "%PG_DATA%\postgresql.conf"
-echo listen_addresses = 'localhost' >> "%PG_DATA%\postgresql.conf"
-echo port = 5432 >> "%PG_DATA%\postgresql.conf"
-echo logging_collector = on >> "%PG_DATA%\postgresql.conf"
-echo log_directory = '%INSTALL_DIR:\=/%/logs' >> "%PG_DATA%\postgresql.conf"
-echo log_filename = 'postgresql-%%Y-%%m-%%d.log' >> "%PG_DATA%\postgresql.conf"
-
-:: Update pg_hba.conf for local connections
-echo # Allow local connections >> "%PG_DATA%\pg_hba.conf"
-echo host    all             all             127.0.0.1/32            md5 >> "%PG_DATA%\pg_hba.conf"
+echo # Custom settings for Mekari E-Sign>> "%PG_DATA%\postgresql.conf"
+echo listen_addresses = 'localhost'>> "%PG_DATA%\postgresql.conf"
+echo port = 5432>> "%PG_DATA%\postgresql.conf"
+echo logging_collector = on>> "%PG_DATA%\postgresql.conf"
+echo log_directory = 'log'>> "%PG_DATA%\postgresql.conf"
+echo log_filename = 'postgresql-%%Y-%%m-%%d.log'>> "%PG_DATA%\postgresql.conf"
 
 echo PostgreSQL initialized successfully!
-exit /b 0
+echo Default credentials:
+echo   Username: postgres
+echo   Password: postgres123
+echo.
 
+exit /b 0
