@@ -222,6 +222,8 @@ begin
 end;
 
 function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  ResultCode: Integer;
 begin
   Result := '';
   // Stop existing services before upgrading
@@ -242,7 +244,4 @@ begin
     Result := False;
   end;
 end;
-
-var
-  ResultCode: Integer;
 
