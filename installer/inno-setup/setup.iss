@@ -188,6 +188,7 @@ procedure CurStepChanged(CurStep: TSetupStep);
 var
   ConfigFile: String;
   ConfigContent: AnsiString;
+  ConfigStr: String;
   AppPort: String;
   PgPassword: String;
 begin
@@ -198,20 +199,24 @@ begin
     
     if LoadStringFromFile(ConfigFile, ConfigContent) then
     begin
+      // Convert AnsiString to String for manipulation
+      ConfigStr := String(ConfigContent);
+      
       // Update port
       AppPort := PortPage.Values[0];
       if AppPort <> '' then
-        StringChangeEx(ConfigContent, 'port: 8080', 'port: ' + AppPort, True);
+        StringChangeEx(ConfigStr, 'port: 8080', 'port: ' + AppPort, True);
       
       // Update PostgreSQL password
       if WizardIsComponentSelected('postgres') then
       begin
         PgPassword := ConfigPage.Values[0];
         if PgPassword <> '' then
-          StringChangeEx(ConfigContent, 'password: "your_password"', 'password: "' + PgPassword + '"', True);
+          StringChangeEx(ConfigStr, 'password: "your_password"', 'password: "' + PgPassword + '"', True);
       end;
       
-      SaveStringToFile(ConfigFile, ConfigContent, False);
+      // Save back to file
+      SaveStringToFile(ConfigFile, AnsiString(ConfigStr), False);
     end;
   end;
 end;
