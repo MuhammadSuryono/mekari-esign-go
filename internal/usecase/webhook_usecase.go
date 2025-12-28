@@ -160,7 +160,7 @@ func (u *webhookUsecase) ProcessWebhook(ctx context.Context, payload *entity.Web
 	}
 	if navSetup != nil {
 		progressPath = navSetup.FileLocationProcess
-		finishPath = navSetup.FileLocationOut
+		finishPath = navSetup.FileLocationIn
 		u.logger.Info("Using NAV setup paths",
 			zap.String("progress_path", progressPath),
 			zap.String("finish_path", finishPath),

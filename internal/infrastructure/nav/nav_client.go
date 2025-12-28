@@ -47,7 +47,7 @@ func (c *Client) GetLogEntry(ctx context.Context, entryNo int) (*entity.NAVLogEn
 	}
 
 	// Build URL with company and Entry_No parameter
-	apiURL := fmt.Sprintf("%s/ODataV4/Company('%s')/Api_MekariInvoiceLogEntries(Entry_No=%d)",
+	apiURL := fmt.Sprintf("%s/ODataV4/Company('%s')/Api_MekariInvoiceLogEntries?$filter=Entry_No eq %d",
 		c.config.NAV.BaseURL,
 		url.PathEscape(c.config.NAV.Company),
 		entryNo,
@@ -65,8 +65,6 @@ func (c *Client) GetLogEntry(ctx context.Context, entryNo int) (*entity.NAVLogEn
 
 	auth := base64.StdEncoding.EncodeToString([]byte(c.config.NAV.Username + ":" + c.config.NAV.Password))
 	req.Header.Set("Authorization", "Basic "+auth)
-	req.Header.Set("If-Match", "*")
-	req.Header.Set("Content-Type", "application/json;EEE754Compatible=true")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -103,15 +101,6 @@ func (c *Client) UpdateLogEntry(ctx context.Context, entry *entity.NAVLogEntry) 
 		return nil
 	}
 
-	// First, get the existing entry to retrieve @odata.etag
-	existingEntry, err := c.GetLogEntry(ctx, entry.EntryNo)
-	if err != nil {
-		return fmt.Errorf("failed to get existing entry for etag: %w", err)
-	}
-
-	// Copy the @odata.etag from existing entry
-	entry.ODataEtag = existingEntry.ODataEtag
-
 	// Build URL with company and Entry_No parameter
 	apiURL := fmt.Sprintf("%s/ODataV4/Company('%s')/Api_MekariInvoiceLogEntries(Entry_No=%d)",
 		c.config.NAV.BaseURL,
@@ -131,7 +120,7 @@ func (c *Client) UpdateLogEntry(ctx context.Context, entry *entity.NAVLogEntry) 
 		zap.String("invoice_no", entry.InvoiceNo),
 		zap.String("signing_status", entry.SigningStatus),
 		zap.String("stamping_status", entry.StampingStatus),
-		zap.String("odata_etag", entry.ODataEtag),
+		zap.String("request_body", string(reqBody)),
 	)
 
 	// Create PATCH request
@@ -141,7 +130,8 @@ func (c *Client) UpdateLogEntry(ctx context.Context, entry *entity.NAVLogEntry) 
 	}
 
 	// Set headers
-	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Content-Type", "application/json;EEE754Compatible=true")
+	req.Header.Set("If-Match", "*")
 	auth := base64.StdEncoding.EncodeToString([]byte(c.config.NAV.Username + ":" + c.config.NAV.Password))
 	req.Header.Set("Authorization", "Basic "+auth)
 

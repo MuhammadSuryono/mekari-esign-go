@@ -57,7 +57,6 @@ type DocumentInfo struct {
 
 // NAVLogEntry represents the log entry to send to NAV (matches OData field names)
 type NAVLogEntry struct {
-	ODataEtag       string `json:"@odata.etag,omitempty"`
 	EntryNo         int    `json:"Entry_No"`
 	InvoiceNo       string `json:"Invoice_No"`
 	Filename        string `json:"File_Name_Invoice_No"`
@@ -67,23 +66,23 @@ type NAVLogEntry struct {
 	SigningStatus   string `json:"Signing_Status"`
 	StampingStatus  string `json:"Stamping_Status"`
 	// Signer 1
-	Signer1Name          string `json:"Signer1_Name"`
-	Signer1Email         string `json:"Signer1_Email"`
-	Signer1Order         string `json:"Signer1_Order"`
-	Signer1SigningStatus string `json:"Signer1_Signing_Status"`
-	Signer1SigningDate   string `json:"Signer1_Signing_DateTime"`
+	Signer1Name          string `json:"Signer1_Name,omitempty"`
+	Signer1Email         string `json:"Signer1_Email,omitempty"`
+	Signer1Order         string `json:"Signer1_Order,omitempty"`
+	Signer1SigningStatus string `json:"Signer1_Signing_Status,omitempty"`
+	Signer1SigningDate   string `json:"Signer1_Signing_DateTime,omitempty"`
 	// Signer 2
-	Signer2Name          string `json:"Signer2_Name"`
-	Signer2Email         string `json:"Signer2_Email"`
-	Signer2Order         string `json:"Signer2_Order"`
-	Signer2SigningStatus string `json:"Signer2_Signing_Status"`
-	Signer2SigningDate   string `json:"Signer2_Signing_DateTime"`
+	Signer2Name          string `json:"Signer2_Name,omitempty"`
+	Signer2Email         string `json:"Signer2_Email,omitempty"`
+	Signer2Order         string `json:"Signer2_Order,omitempty"`
+	Signer2SigningStatus string `json:"Signer2_Signing_Status,omitempty"`
+	Signer2SigningDate   string `json:"Signer2_Signing_DateTime,omitempty"`
 	// Signer 3
-	Signer3Name          string `json:"Signer3_Name"`
-	Signer3Email         string `json:"Signer3_Email"`
-	Signer3Order         string `json:"Signer3_Order"`
-	Signer3SigningStatus string `json:"Signer3_Signing_Status"`
-	Signer3SigningDate   string `json:"Signer3_Signing_DateTime"`
+	Signer3Name          string `json:"Signer3_Name,omitempty"`
+	Signer3Email         string `json:"Signer3_Email,omitempty"`
+	Signer3Order         string `json:"Signer3_Order,omitempty"`
+	Signer3SigningStatus string `json:"Signer3_Signing_Status,omitempty"`
+	Signer3SigningDate   string `json:"Signer3_Signing_DateTime,omitempty"`
 	// Signer 4 (optional, not in current API but for future use)
 	Signer4Name          string `json:"Signer4_Name,omitempty"`
 	Signer4Email         string `json:"Signer4_Email,omitempty"`
