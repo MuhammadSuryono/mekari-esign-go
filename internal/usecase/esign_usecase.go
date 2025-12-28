@@ -24,6 +24,7 @@ type DocumentMapping struct {
 	Filename         string                   `json:"filename"`
 	StampPositions   *entity.StampPosition    `json:"stamp_positions,omitempty"`
 	DocumentDeadline *entity.DocumentDeadline `json:"document_deadline,omitempty"`
+	EntryNo          int                      `json:"entry_no"`
 }
 
 type EsignUsecase interface {
@@ -191,6 +192,7 @@ func (u *esignUsecase) GlobalRequestSign(ctx context.Context, req *entity.Global
 		Filename:         response.Data.Attributes.Filename,
 		StampPositions:   req.StampPositions,
 		DocumentDeadline: req.DocumentDeadline,
+		EntryNo:          1,
 	}
 	mappingJSON, _ := json.Marshal(mapping)
 	if err := u.redisClient.Set(ctx, documentKey, string(mappingJSON), 0); err != nil {

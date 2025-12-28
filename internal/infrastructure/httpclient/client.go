@@ -16,6 +16,7 @@ import (
 	"go.uber.org/zap"
 
 	"mekari-esign/internal/config"
+	"mekari-esign/internal/domain/entity"
 	"mekari-esign/internal/infrastructure/oauth2"
 )
 
@@ -50,16 +51,22 @@ type FileUpload struct {
 	Content  []byte
 }
 
+// APILogSaver interface for saving API logs
+type APILogSaver interface {
+	Save(ctx context.Context, log *entity.APILog) error
+}
+
 type httpClient struct {
 	client        *http.Client
 	config        *config.Config
 	baseURL       string
 	tokenService  oauth2.TokenService
 	hmacSignature *HMACSignature
+	apiLogSaver   APILogSaver
 	logger        *zap.Logger
 }
 
-func NewHTTPClient(cfg *config.Config, tokenService oauth2.TokenService, logger *zap.Logger) HTTPClient {
+func NewHTTPClient(cfg *config.Config, tokenService oauth2.TokenService, apiLogSaver APILogSaver, logger *zap.Logger) HTTPClient {
 	c := &httpClient{
 		client: &http.Client{
 			Timeout: cfg.Mekari.Timeout,
@@ -67,6 +74,7 @@ func NewHTTPClient(cfg *config.Config, tokenService oauth2.TokenService, logger 
 		config:       cfg,
 		baseURL:      cfg.Mekari.BaseURL,
 		tokenService: tokenService,
+		apiLogSaver:  apiLogSaver,
 		logger:       logger,
 	}
 
@@ -155,6 +163,50 @@ func (c *httpClient) logResponse(statusCode int, statusText string, duration tim
 	c.logger.Info(logBuilder.String())
 }
 
+// saveAPILog saves the API request/response log to database
+func (c *httpClient) saveAPILog(ctx context.Context, method, endpoint string, requestBody []byte, responseBody []byte, statusCode int, duration time.Duration, email string) {
+	if c.apiLogSaver == nil {
+		return
+	}
+
+	// Truncate base64 in request body
+	reqBodyStr := ""
+	if len(requestBody) > 0 {
+		reqBodyStr = truncateBase64InJSON(string(requestBody), 100)
+		// Limit total size
+		if len(reqBodyStr) > 10000 {
+			reqBodyStr = reqBodyStr[:10000] + "... [truncated]"
+		}
+	}
+
+	// Truncate response body if too long
+	respBodyStr := string(responseBody)
+	if len(respBodyStr) > 10000 {
+		respBodyStr = respBodyStr[:10000] + "... [truncated]"
+	}
+
+	apiLog := &entity.APILog{
+		Endpoint:     endpoint,
+		Method:       method,
+		RequestBody:  reqBodyStr,
+		ResponseBody: respBodyStr,
+		StatusCode:   statusCode,
+		Duration:     duration.Milliseconds(),
+		Email:        email,
+		CreatedAt:    time.Now(),
+	}
+
+	// Save asynchronously to not block the request
+	go func() {
+		if err := c.apiLogSaver.Save(context.Background(), apiLog); err != nil {
+			c.logger.Warn("Failed to save API log to database",
+				zap.String("endpoint", endpoint),
+				zap.Error(err),
+			)
+		}
+	}()
+}
+
 // setAuthHeaders sets the appropriate authorization headers based on config
 func (c *httpClient) setAuthHeaders(ctx context.Context, req *http.Request, reqCtx *RequestContext) error {
 	if c.config.Mekari.IsHMAC() {
@@ -220,6 +272,13 @@ func (c *httpClient) doRequest(ctx context.Context, reqCtx *RequestContext, meth
 
 	// Log response details
 	c.logResponse(resp.StatusCode, resp.Status, duration, resp.Header, respBody)
+
+	// Save API log to database
+	email := ""
+	if reqCtx != nil {
+		email = reqCtx.Email
+	}
+	c.saveAPILog(ctx, method, fullURL, jsonBody, respBody, resp.StatusCode, duration, email)
 
 	// Handle 401 Unauthorized - try to refresh token and retry (OAuth2 only)
 	if resp.StatusCode == http.StatusUnauthorized && !isRetry && c.config.Mekari.IsOAuth2() {
@@ -357,6 +416,13 @@ func (c *httpClient) doMultipartRequest(ctx context.Context, reqCtx *RequestCont
 
 	// Log response details
 	c.logResponse(resp.StatusCode, resp.Status, duration, resp.Header, respBody)
+
+	// Save API log to database (for multipart, log the body summary)
+	multipartEmail := ""
+	if reqCtx != nil {
+		multipartEmail = reqCtx.Email
+	}
+	c.saveAPILog(ctx, http.MethodPost, fullURL, []byte(bodySummary.String()), respBody, resp.StatusCode, duration, multipartEmail)
 
 	// Handle 401 Unauthorized - try to refresh token and retry (OAuth2 only)
 	if resp.StatusCode == http.StatusUnauthorized && !isRetry && c.config.Mekari.IsOAuth2() {

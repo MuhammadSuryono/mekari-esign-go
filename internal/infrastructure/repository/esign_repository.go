@@ -106,8 +106,7 @@ func (r *esignRepository) GlobalRequestSign(ctx context.Context, email string, r
 	}
 
 	// Build callback URL
-	//callbackURL := r.config.App.BaseURL + "/webhook/mekari"
-	callbackURL := "https://webhook.site/acf98cf8-c888-4720-a907-32614ae8fbca"
+	callbackURL := r.config.App.BaseURL + "/webhook/mekari"
 
 	// Build Mekari API request with document from local folder
 	// Note: StampPositions are NOT sent here - they are saved and used later for stamping
@@ -117,6 +116,7 @@ func (r *esignRepository) GlobalRequestSign(ctx context.Context, email string, r
 		Signers:          mekariSigners,
 		CallbackURL:      callbackURL,
 		DocumentDeadline: req.DocumentDeadline,
+		EntryNo:          1,
 	}
 
 	reqCtx := &httpclient.RequestContext{Email: email}

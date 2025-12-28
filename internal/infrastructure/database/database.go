@@ -87,6 +87,34 @@ func (d *Database) migrate() error {
 		return fmt.Errorf("failed to create index: %w", err)
 	}
 
+	// Create api_logs table for logging Mekari API requests
+	createAPILogsSQL := `
+	CREATE TABLE IF NOT EXISTS api_logs (
+		id SERIAL PRIMARY KEY,
+		endpoint VARCHAR(500) NOT NULL,
+		method VARCHAR(10) NOT NULL,
+		request_body TEXT,
+		response_body TEXT,
+		status_code INT NOT NULL,
+		duration_ms BIGINT NOT NULL,
+		email VARCHAR(255),
+		created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+	);
+	`
+	_, err = d.DB.Exec(createAPILogsSQL)
+	if err != nil {
+		return fmt.Errorf("failed to create api_logs table: %w", err)
+	}
+
+	// Create index for api_logs
+	createAPILogsIndexSQL := `
+	CREATE INDEX IF NOT EXISTS idx_api_logs_created_at ON api_logs(created_at);
+	`
+	_, err = d.DB.Exec(createAPILogsIndexSQL)
+	if err != nil {
+		return fmt.Errorf("failed to create api_logs index: %w", err)
+	}
+
 	d.logger.Info("Database migrations completed successfully")
 	return nil
 }

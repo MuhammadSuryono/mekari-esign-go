@@ -47,6 +47,14 @@ logging:
   level: "debug"
   format: "json"
 
+nav:
+  enabled: false                                      # Enable/disable NAV integration
+  base_url: "http://your-nav-server:port/your-instance"
+  company: "Your Company Name"
+  username: "your_username"
+  password: "your_password"
+  timeout: 30
+
 # Auto-update configuration (for Windows service)
 # Update server will check GitHub releases automatically
 # To disable auto-update, remove the scheduled task:

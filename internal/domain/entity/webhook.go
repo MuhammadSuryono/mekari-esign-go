@@ -54,3 +54,41 @@ type DocumentInfo struct {
 	DocURL         string    `json:"doc_url"`
 	UpdatedAt      time.Time `json:"updated_at"`
 }
+
+// NAVLogEntry represents the log entry to send to NAV
+type NAVLogEntry struct {
+	ID                      string `json:"id"`
+	InvoiceNumber           string `json:"invoice_number"`
+	Filename                string `json:"filename"`
+	EntryNo                 int    `json:"entry_no"`
+	LocationDocumentOut     string `json:"location_document_out"`
+	LocationDocumentProcess string `json:"location_document_process"`
+	LocationDocumentIn      string `json:"location_document_in"`
+	SigningStatus           string `json:"signing_status"`
+	StampingStatus          string `json:"stamping_status"`
+	SignersName1            string `json:"signersName1"`
+	SignersEmail1           string `json:"signersEmail1"`
+	SignersOrder1           string `json:"signersOrder1"`
+	SignersSigningStatus1   string `json:"signersSigningStatus1"`
+	SignersSigningDate1     string `json:"signersSigningDate1"`
+}
+
+// MapSigningStatus maps Mekari signing status to NAV status
+func MapSigningStatus(status string) string {
+	if status == "completed" {
+		return "Completed"
+	}
+	return "Pending"
+}
+
+// MapStampingStatus maps Mekari stamping status to NAV status
+func MapStampingStatus(status string) string {
+	switch status {
+	case "completed", "success":
+		return "Completed"
+	case "none":
+		return ""
+	default:
+		return "Pending"
+	}
+}

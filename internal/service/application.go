@@ -14,6 +14,7 @@ import (
 	"mekari-esign/internal/infrastructure/document"
 	"mekari-esign/internal/infrastructure/httpclient"
 	"mekari-esign/internal/infrastructure/logger"
+	"mekari-esign/internal/infrastructure/nav"
 	"mekari-esign/internal/infrastructure/oauth2"
 	"mekari-esign/internal/infrastructure/redis"
 	"mekari-esign/internal/infrastructure/repository"
@@ -55,6 +56,7 @@ func (a *Application) Run() {
 		oauth2.Module,
 		document.Module,
 		httpclient.Module,
+		nav.Module,
 		repository.Module,
 
 		// Business Logic

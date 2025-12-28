@@ -52,6 +52,7 @@ type MekariSignRequest struct {
 	CallbackURL      string            `json:"callback_url,omitempty"`        // Webhook callback URL
 	QRCodeAuditTrail *QRCodeAuditTrail `json:"qr_code_audit_trail,omitempty"` // QR code audit trail position
 	DocumentDeadline *DocumentDeadline `json:"document_deadline,omitempty"`   // Deadline settings
+	EntryNo          int               `json:"entry_no"`                      // Entry number for tracking
 }
 
 // MekariSigner represents a signer in Mekari API format

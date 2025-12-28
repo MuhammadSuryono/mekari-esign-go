@@ -21,6 +21,7 @@ type Config struct {
 	OAuth    OAuthConfig    `mapstructure:"oauth"`
 	Document DocumentConfig `mapstructure:"document"`
 	Logging  LoggingConfig  `mapstructure:"logging"`
+	NAV      NAVConfig      `mapstructure:"nav"`
 }
 
 type AppConfig struct {
@@ -111,6 +112,15 @@ type DocumentConfig struct {
 type LoggingConfig struct {
 	Level  string `mapstructure:"level"`
 	Format string `mapstructure:"format"`
+}
+
+type NAVConfig struct {
+	Enabled  bool   `mapstructure:"enabled"`
+	BaseURL  string `mapstructure:"base_url"`
+	Company  string `mapstructure:"company"`
+	Username string `mapstructure:"username"`
+	Password string `mapstructure:"password"`
+	Timeout  int    `mapstructure:"timeout"`
 }
 
 func NewConfig() (*Config, error) {

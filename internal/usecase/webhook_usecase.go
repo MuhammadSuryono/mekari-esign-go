@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strconv"
 	"time"
 
 	"go.uber.org/zap"
@@ -15,6 +16,7 @@ import (
 	"mekari-esign/internal/config"
 	"mekari-esign/internal/domain/entity"
 	"mekari-esign/internal/infrastructure/document"
+	"mekari-esign/internal/infrastructure/nav"
 	"mekari-esign/internal/infrastructure/oauth2"
 	"mekari-esign/internal/infrastructure/redis"
 )
@@ -34,6 +36,7 @@ type webhookUsecase struct {
 	redisClient  *redis.RedisClient
 	docService   document.DocumentService
 	tokenService oauth2.TokenService
+	navClient    *nav.Client
 	logger       *zap.Logger
 	httpClient   *http.Client
 }
@@ -43,6 +46,7 @@ func NewWebhookUsecase(
 	redisClient *redis.RedisClient,
 	docService document.DocumentService,
 	tokenService oauth2.TokenService,
+	navClient *nav.Client,
 	logger *zap.Logger,
 ) WebhookUsecase {
 	return &webhookUsecase{
@@ -50,6 +54,7 @@ func NewWebhookUsecase(
 		redisClient:  redisClient,
 		docService:   docService,
 		tokenService: tokenService,
+		navClient:    navClient,
 		logger:       logger,
 		httpClient: &http.Client{
 			Timeout: cfg.Mekari.Timeout,
@@ -123,6 +128,15 @@ func (u *webhookUsecase) ProcessWebhook(ctx context.Context, payload *entity.Web
 		zap.String("email", email),
 		zap.String("invoice_number", invoiceNumber),
 	)
+
+	// Send log entry to NAV
+	if err := u.sendNAVLogEntry(ctx, payload, &mapping); err != nil {
+		u.logger.Warn("Failed to send log entry to NAV",
+			zap.String("document_id", documentID),
+			zap.Error(err),
+		)
+		// Don't fail the webhook processing, just log warning
+	}
 
 	// Handle signing completed
 	if payload.Data.Attributes.SigningStatus == "completed" && payload.Data.Attributes.StampingStatus != "success" {
@@ -306,8 +320,8 @@ func (u *webhookUsecase) requestStamping(ctx context.Context, email string, sign
 		Doc:         base64Doc,
 		Filename:    mapping.Filename,
 		Annotations: annotations,
-		//CallbackURL:      u.config.App.BaseURL + "/webhook/mekari",
-		CallbackURL:      "https://webhook.site/acf98cf8-c888-4720-a907-32614ae8fbca",
+		CallbackURL: u.config.App.BaseURL + "/webhook/mekari",
+		//CallbackURL:      "https://webhook.site/acf98cf8-c888-4720-a907-32614ae8fbca",
 		DocumentDeadline: mapping.DocumentDeadline,
 	}
 
@@ -390,6 +404,42 @@ func (u *webhookUsecase) requestStamping(ctx context.Context, email string, sign
 	}
 
 	return nil
+}
+
+// sendNAVLogEntry sends a log entry to NAV
+func (u *webhookUsecase) sendNAVLogEntry(ctx context.Context, payload *entity.WebhookPayload, mapping *DocumentMapping) error {
+	// Build signer info from payload
+	var signersName1, signersEmail1, signersOrder1, signersSigningStatus1, signersSigningDate1 string
+	if len(payload.Data.Attributes.Signers) > 0 {
+		signer := payload.Data.Attributes.Signers[0]
+		signersName1 = signer.Name
+		signersEmail1 = signer.Email
+		signersOrder1 = strconv.Itoa(signer.Order)
+		signersSigningStatus1 = entity.MapSigningStatus(signer.Status)
+		if signer.SignedAt != nil {
+			signersSigningDate1 = *signer.SignedAt
+		}
+	}
+
+	// Build NAV log entry
+	navEntry := &entity.NAVLogEntry{
+		ID:                      payload.Data.ID,
+		InvoiceNumber:           mapping.InvoiceNumber,
+		Filename:                payload.Data.Attributes.Filename,
+		EntryNo:                 mapping.EntryNo,
+		LocationDocumentOut:     u.config.Document.BasePath + "/" + u.config.Document.FinishFolder,
+		LocationDocumentProcess: u.config.Document.BasePath + "/" + u.config.Document.ProgressFolder,
+		LocationDocumentIn:      u.config.Document.BasePath + "/" + u.config.Document.ReadyFolder,
+		SigningStatus:           entity.MapSigningStatus(payload.Data.Attributes.SigningStatus),
+		StampingStatus:          entity.MapStampingStatus(payload.Data.Attributes.StampingStatus),
+		SignersName1:            signersName1,
+		SignersEmail1:           signersEmail1,
+		SignersOrder1:           signersOrder1,
+		SignersSigningStatus1:   signersSigningStatus1,
+		SignersSigningDate1:     signersSigningDate1,
+	}
+
+	return u.navClient.SendLogEntry(ctx, navEntry)
 }
 
 // extractInvoiceNumber extracts invoice number from filename
