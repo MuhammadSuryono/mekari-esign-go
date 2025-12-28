@@ -107,3 +107,53 @@ func (c *Client) SendLogEntry(ctx context.Context, entry *entity.NAVLogEntry) er
 
 	return nil
 }
+
+// GetSetup fetches the Mekari setup configuration from NAV
+func (c *Client) GetSetup(ctx context.Context) (*entity.NAVSetup, error) {
+	if !c.config.NAV.Enabled {
+		return nil, nil
+	}
+
+	apiURL := fmt.Sprintf("%s/ODataV4/Company('%s')/Api_MekariSetup",
+		c.config.NAV.BaseURL,
+		url.PathEscape(c.config.NAV.Company),
+	)
+
+	c.logger.Info("Fetching Mekari setup from NAV", zap.String("url", apiURL))
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create NAV setup request: %w", err)
+	}
+
+	auth := base64.StdEncoding.EncodeToString([]byte(c.config.NAV.Username + ":" + c.config.NAV.Password))
+	req.Header.Set("Authorization", "Basic "+auth)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to fetch NAV setup: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		body, _ := io.ReadAll(resp.Body)
+		return nil, fmt.Errorf("NAV setup failed: status=%d, body=%s", resp.StatusCode, string(body))
+	}
+
+	var setupResp entity.NAVSetupResponse
+	if err := json.NewDecoder(resp.Body).Decode(&setupResp); err != nil {
+		return nil, fmt.Errorf("failed to parse NAV setup: %w", err)
+	}
+
+	if len(setupResp.Value) == 0 {
+		return nil, fmt.Errorf("no setup found in NAV")
+	}
+
+	c.logger.Info("Successfully fetched NAV setup",
+		zap.String("file_location_in", setupResp.Value[0].FileLocationIn),
+		zap.String("file_location_process", setupResp.Value[0].FileLocationProcess),
+		zap.String("file_location_out", setupResp.Value[0].FileLocationOut),
+	)
+
+	return &setupResp.Value[0], nil
+}

@@ -117,3 +117,16 @@ func MapStampingStatus(status string) string {
 		return "Pending"
 	}
 }
+
+// NAVSetupResponse represents the response from NAV Api_MekariSetup
+type NAVSetupResponse struct {
+	Value []NAVSetup `json:"value"`
+}
+
+// NAVSetup represents the Mekari setup configuration from NAV
+type NAVSetup struct {
+	PrimaryKey          string `json:"Primary_Key"`
+	FileLocationIn      string `json:"File_Location_In"`
+	FileLocationProcess string `json:"File_Location_Process"`
+	FileLocationOut     string `json:"File_Location_Out"`
+}

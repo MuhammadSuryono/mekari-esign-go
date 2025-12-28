@@ -7,6 +7,7 @@ import (
 
 	"go.uber.org/zap"
 
+	"mekari-esign/internal/config"
 	"mekari-esign/internal/domain/entity"
 	"mekari-esign/internal/domain/repository"
 	"mekari-esign/internal/infrastructure/redis"
@@ -36,14 +37,16 @@ type EsignUsecase interface {
 }
 
 type esignUsecase struct {
+	config       *config.Config
 	repo         repository.EsignRepository
 	oauthUsecase OAuthUsecase
 	redisClient  *redis.RedisClient
 	logger       *zap.Logger
 }
 
-func NewEsignUsecase(repo repository.EsignRepository, oauthUsecase OAuthUsecase, redisClient *redis.RedisClient, logger *zap.Logger) EsignUsecase {
+func NewEsignUsecase(cfg *config.Config, repo repository.EsignRepository, oauthUsecase OAuthUsecase, redisClient *redis.RedisClient, logger *zap.Logger) EsignUsecase {
 	return &esignUsecase{
+		config:       cfg,
 		repo:         repo,
 		oauthUsecase: oauthUsecase,
 		redisClient:  redisClient,
@@ -103,30 +106,32 @@ func (u *esignUsecase) GlobalRequestSign(ctx context.Context, req *entity.Global
 		zap.Int("signers_count", len(req.Signers)),
 	)
 
-	// Validate email
-	if req.Email == "" {
-		return nil, fmt.Errorf("email is required")
+	// Validate email (only required for OAuth2)
+	if u.config.Mekari.IsOAuth2() && req.Email == "" {
+		return nil, fmt.Errorf("email is required for OAuth2 authentication")
 	}
 
-	// Check if OAuth code exists for this email
-	codeCheck, err := u.oauthUsecase.CheckCode(ctx, req.Email)
-	if err != nil {
-		u.logger.Error("Failed to check OAuth code", zap.Error(err))
-		return nil, fmt.Errorf("failed to check OAuth code: %w", err)
-	}
+	// Check if OAuth code exists for this email (only for OAuth2 auth)
+	if u.config.Mekari.IsOAuth2() {
+		codeCheck, err := u.oauthUsecase.CheckCode(ctx, req.Email)
+		if err != nil {
+			u.logger.Error("Failed to check OAuth code", zap.Error(err))
+			return nil, fmt.Errorf("failed to check OAuth code: %w", err)
+		}
 
-	// If no code exists, return redirect URL
-	if !codeCheck.HasCode {
-		u.logger.Info("No OAuth code found, returning redirect URL",
-			zap.String("email", req.Email),
-			zap.String("redirect_url", codeCheck.RedirectURL),
-		)
-		return &entity.GlobalSignResult{
-			Success:     false,
-			NeedAuth:    true,
-			RedirectURL: codeCheck.RedirectURL,
-			Message:     "Authorization required. Please authorize first.",
-		}, nil
+		// If no code exists, return redirect URL
+		if !codeCheck.HasCode {
+			u.logger.Info("No OAuth code found, returning redirect URL",
+				zap.String("email", req.Email),
+				zap.String("redirect_url", codeCheck.RedirectURL),
+			)
+			return &entity.GlobalSignResult{
+				Success:     false,
+				NeedAuth:    true,
+				RedirectURL: codeCheck.RedirectURL,
+				Message:     "Authorization required. Please authorize first.",
+			}, nil
+		}
 	}
 
 	// Validate request

@@ -24,6 +24,8 @@ import (
 const (
 	// Redis key prefix for document info
 	documentInfoKeyPrefix = "mekari:document:info:"
+	// Redis key prefix for NAV setup cache (by entry_no)
+	navSetupKeyPrefix = "mekari:nav_setup:"
 )
 
 type WebhookUsecase interface {
@@ -406,17 +408,69 @@ func (u *webhookUsecase) requestStamping(ctx context.Context, email string, sign
 	return nil
 }
 
+// getNAVSetupCached gets NAV setup from cache or fetches from NAV
+func (u *webhookUsecase) getNAVSetupCached(ctx context.Context, entryNo int) (*entity.NAVSetup, error) {
+	cacheKey := navSetupKeyPrefix + strconv.Itoa(entryNo)
+
+	// Try to get from cache
+	cached, err := u.redisClient.Get(ctx, cacheKey)
+	if err == nil && cached != "" {
+		var setup entity.NAVSetup
+		if err := json.Unmarshal([]byte(cached), &setup); err == nil {
+			u.logger.Debug("Using cached NAV setup", zap.Int("entry_no", entryNo))
+			return &setup, nil
+		}
+	}
+
+	// Fetch from NAV
+	setup, err := u.navClient.GetSetup(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if setup == nil {
+		return nil, nil
+	}
+
+	// Cache the setup (no expiration - permanent for this entry_no)
+	setupJSON, _ := json.Marshal(setup)
+	if err := u.redisClient.Set(ctx, cacheKey, string(setupJSON), 0); err != nil {
+		u.logger.Warn("Failed to cache NAV setup", zap.Error(err))
+	} else {
+		u.logger.Info("NAV setup cached",
+			zap.Int("entry_no", entryNo),
+			zap.String("key", cacheKey),
+		)
+	}
+
+	return setup, nil
+}
+
 // sendNAVLogEntry sends a log entry to NAV
 func (u *webhookUsecase) sendNAVLogEntry(ctx context.Context, payload *entity.WebhookPayload, mapping *DocumentMapping) error {
+	// Default locations from config
+	locationIn := u.config.Document.BasePath + "/" + u.config.Document.ReadyFolder
+	locationProcess := u.config.Document.BasePath + "/" + u.config.Document.ProgressFolder
+	locationOut := u.config.Document.BasePath + "/" + u.config.Document.FinishFolder
+
+	// Get NAV setup (cached by entry_no)
+	navSetup, err := u.getNAVSetupCached(ctx, mapping.EntryNo)
+	if err != nil {
+		u.logger.Warn("Failed to get NAV setup, using config values", zap.Error(err))
+	} else if navSetup != nil {
+		locationIn = navSetup.FileLocationIn
+		locationProcess = navSetup.FileLocationProcess
+		locationOut = navSetup.FileLocationOut
+	}
+
 	// Build NAV log entry
 	navEntry := &entity.NAVLogEntry{
 		ID:                      payload.Data.ID,
 		InvoiceNumber:           mapping.InvoiceNumber,
 		Filename:                payload.Data.Attributes.Filename,
 		EntryNo:                 mapping.EntryNo,
-		LocationDocumentOut:     u.config.Document.BasePath + "/" + u.config.Document.FinishFolder,
-		LocationDocumentProcess: u.config.Document.BasePath + "/" + u.config.Document.ProgressFolder,
-		LocationDocumentIn:      u.config.Document.BasePath + "/" + u.config.Document.ReadyFolder,
+		LocationDocumentOut:     locationOut,
+		LocationDocumentProcess: locationProcess,
+		LocationDocumentIn:      locationIn,
 		SigningStatus:           entity.MapSigningStatus(payload.Data.Attributes.SigningStatus),
 		StampingStatus:          entity.MapStampingStatus(payload.Data.Attributes.StampingStatus),
 	}
