@@ -152,6 +152,21 @@ func (u *webhookUsecase) ProcessWebhook(ctx context.Context, payload *entity.Web
 		// Don't fail the webhook processing, just log warning
 	}
 
+	// Get NAV setup for file paths
+	var progressPath, finishPath string
+	navSetup, err := u.getNAVSetupCached(ctx, mapping.EntryNo)
+	if err != nil {
+		u.logger.Warn("Failed to get NAV setup, using config values", zap.Error(err))
+	}
+	if navSetup != nil {
+		progressPath = navSetup.FileLocationProcess
+		finishPath = navSetup.FileLocationOut
+		u.logger.Info("Using NAV setup paths",
+			zap.String("progress_path", progressPath),
+			zap.String("finish_path", finishPath),
+		)
+	}
+
 	// Handle signing completed
 	if payload.Data.Attributes.SigningStatus == "completed" && payload.Data.Attributes.StampingStatus != "success" {
 		u.logger.Info("Signing completed",
@@ -175,7 +190,7 @@ func (u *webhookUsecase) ProcessWebhook(ctx context.Context, payload *entity.Web
 				zap.String("document_id", documentID),
 			)
 
-			if err := u.replaceDocumentInProgress(invoiceNumber, signedContent); err != nil {
+			if err := u.replaceDocumentInProgress(invoiceNumber, signedContent, progressPath); err != nil {
 				u.logger.Error("Failed to replace document in progress",
 					zap.String("document_id", documentID),
 					zap.Error(err),
@@ -191,7 +206,7 @@ func (u *webhookUsecase) ProcessWebhook(ctx context.Context, payload *entity.Web
 			}
 		} else {
 			// No stamping needed, replace the file in progress folder
-			if err := u.replaceDocumentInProgress(invoiceNumber, signedContent); err != nil {
+			if err := u.replaceDocumentInProgress(invoiceNumber, signedContent, progressPath); err != nil {
 				u.logger.Error("Failed to replace document in progress",
 					zap.String("document_id", documentID),
 					zap.Error(err),
@@ -221,11 +236,17 @@ func (u *webhookUsecase) ProcessWebhook(ctx context.Context, payload *entity.Web
 			return fmt.Errorf("failed to download final document: %w", err)
 		}
 
-		// Save to finish folder and delete from progress
-		if err := u.docService.SaveToFinishAndDeleteProgress(originalFilename, finalContent); err != nil {
+		// Save to finish folder and delete from progress (use NAV setup paths if available)
+		if finishPath != "" && progressPath != "" {
+			err = u.docService.SaveToFinishAndDeleteProgressWithPath(originalFilename, finalContent, finishPath, progressPath)
+		} else {
+			err = u.docService.SaveToFinishAndDeleteProgress(originalFilename, finalContent)
+		}
+		if err != nil {
 			u.logger.Error("Failed to save final document to finish folder",
 				zap.String("document_id", documentID),
 				zap.String("filename", originalFilename),
+				zap.String("finish_path", finishPath),
 				zap.Error(err),
 			)
 			return fmt.Errorf("failed to save final document: %w", err)
@@ -234,6 +255,7 @@ func (u *webhookUsecase) ProcessWebhook(ctx context.Context, payload *entity.Web
 		u.logger.Info("Stamped document saved to finish folder",
 			zap.String("document_id", documentID),
 			zap.String("filename", originalFilename),
+			zap.String("finish_path", finishPath),
 			zap.Int("size_bytes", len(finalContent)),
 		)
 	}
@@ -300,20 +322,33 @@ func (u *webhookUsecase) downloadDocument(ctx context.Context, email, docURL str
 	return content, nil
 }
 
-func (u *webhookUsecase) replaceDocumentInProgress(invoiceNumber string, content []byte) error {
-	// Find the filename in progress folder
-	filename, err := u.docService.FindFilenameInProgress(invoiceNumber)
+func (u *webhookUsecase) replaceDocumentInProgress(invoiceNumber string, content []byte, progressPath string) error {
+	var filename string
+	var err error
+
+	// Find the filename in progress folder (use NAV setup path if provided)
+	if progressPath != "" {
+		filename, err = u.docService.FindFilenameInProgressWithPath(invoiceNumber, progressPath)
+	} else {
+		filename, err = u.docService.FindFilenameInProgress(invoiceNumber)
+	}
 	if err != nil {
 		return fmt.Errorf("failed to find file in progress: %w", err)
 	}
 
 	// Replace the file in progress folder
-	if err := u.docService.ReplaceFileInProgress(filename, content); err != nil {
+	if progressPath != "" {
+		err = u.docService.ReplaceFileInProgressWithPath(filename, content, progressPath)
+	} else {
+		err = u.docService.ReplaceFileInProgress(filename, content)
+	}
+	if err != nil {
 		return fmt.Errorf("failed to replace file: %w", err)
 	}
 
 	u.logger.Info("Document replaced in progress folder",
 		zap.String("filename", filename),
+		zap.String("progress_path", progressPath),
 		zap.Int("size_bytes", len(content)),
 	)
 
@@ -484,7 +519,7 @@ func (u *webhookUsecase) getNAVSetupCached(ctx context.Context, entryNo int) (*e
 	return setup, nil
 }
 
-// sendNAVLogEntry sends a log entry to NAV
+// sendNAVLogEntry sends a log entry to NAV using PATCH
 func (u *webhookUsecase) sendNAVLogEntry(ctx context.Context, payload *entity.WebhookPayload, mapping *DocumentMapping) error {
 	// Default locations from config
 	locationIn := u.config.Document.BasePath + "/" + u.config.Document.ReadyFolder
@@ -501,78 +536,61 @@ func (u *webhookUsecase) sendNAVLogEntry(ctx context.Context, payload *entity.We
 		locationOut = navSetup.FileLocationOut
 	}
 
-	// Build NAV log entry
+	// Build NAV log entry with OData field names
 	navEntry := &entity.NAVLogEntry{
-		ID:                      payload.Data.ID,
-		InvoiceNumber:           mapping.InvoiceNumber,
-		Filename:                payload.Data.Attributes.Filename,
-		EntryNo:                 mapping.EntryNo,
-		LocationDocumentOut:     locationOut,
-		LocationDocumentProcess: locationProcess,
-		LocationDocumentIn:      locationIn,
-		SigningStatus:           entity.MapSigningStatus(payload.Data.Attributes.SigningStatus),
-		StampingStatus:          entity.MapStampingStatus(payload.Data.Attributes.StampingStatus),
+		EntryNo:         mapping.EntryNo,
+		InvoiceNo:       mapping.InvoiceNumber,
+		Filename:        payload.Data.Attributes.Filename,
+		FilePathIn:      locationIn,
+		FilePathProcess: locationProcess,
+		FilePathOut:     locationOut,
+		SigningStatus:   entity.MapSigningStatus(payload.Data.Attributes.SigningStatus),
+		StampingStatus:  entity.MapStampingStatus(payload.Data.Attributes.StampingStatus),
 	}
 
-	// Populate signer info (up to 5 signers)
+	// Populate signer info (up to 3 signers based on NAV API)
 	signers := payload.Data.Attributes.Signers
 
 	// Signer 1
 	if len(signers) > 0 {
-		navEntry.SignersName1 = signers[0].Name
-		navEntry.SignersEmail1 = signers[0].Email
-		navEntry.SignersOrder1 = strconv.Itoa(signers[0].Order)
-		navEntry.SignersSigningStatus1 = entity.MapSigningStatus(signers[0].Status)
+		navEntry.Signer1Name = signers[0].Name
+		navEntry.Signer1Email = signers[0].Email
+		navEntry.Signer1Order = strconv.Itoa(signers[0].Order)
+		navEntry.Signer1SigningStatus = entity.MapSigningStatus(signers[0].Status)
 		if signers[0].SignedAt != nil {
-			navEntry.SignersSigningDate1 = *signers[0].SignedAt
+			navEntry.Signer1SigningDate = *signers[0].SignedAt
+		} else {
+			navEntry.Signer1SigningDate = "0001-01-01T00:00:00Z"
 		}
 	}
 
 	// Signer 2
 	if len(signers) > 1 {
-		navEntry.SignersName2 = signers[1].Name
-		navEntry.SignersEmail2 = signers[1].Email
-		navEntry.SignersOrder2 = strconv.Itoa(signers[1].Order)
-		navEntry.SignersSigningStatus2 = entity.MapSigningStatus(signers[1].Status)
+		navEntry.Signer2Name = signers[1].Name
+		navEntry.Signer2Email = signers[1].Email
+		navEntry.Signer2Order = strconv.Itoa(signers[1].Order)
+		navEntry.Signer2SigningStatus = entity.MapSigningStatus(signers[1].Status)
 		if signers[1].SignedAt != nil {
-			navEntry.SignersSigningDate2 = *signers[1].SignedAt
+			navEntry.Signer2SigningDate = *signers[1].SignedAt
+		} else {
+			navEntry.Signer2SigningDate = "0001-01-01T00:00:00Z"
 		}
 	}
 
 	// Signer 3
 	if len(signers) > 2 {
-		navEntry.SignersName3 = signers[2].Name
-		navEntry.SignersEmail3 = signers[2].Email
-		navEntry.SignersOrder3 = strconv.Itoa(signers[2].Order)
-		navEntry.SignersSigningStatus3 = entity.MapSigningStatus(signers[2].Status)
+		navEntry.Signer3Name = signers[2].Name
+		navEntry.Signer3Email = signers[2].Email
+		navEntry.Signer3Order = strconv.Itoa(signers[2].Order)
+		navEntry.Signer3SigningStatus = entity.MapSigningStatus(signers[2].Status)
 		if signers[2].SignedAt != nil {
-			navEntry.SignersSigningDate3 = *signers[2].SignedAt
+			navEntry.Signer3SigningDate = *signers[2].SignedAt
+		} else {
+			navEntry.Signer3SigningDate = "0001-01-01T00:00:00Z"
 		}
 	}
 
-	// Signer 4
-	if len(signers) > 3 {
-		navEntry.SignersName4 = signers[3].Name
-		navEntry.SignersEmail4 = signers[3].Email
-		navEntry.SignersOrder4 = strconv.Itoa(signers[3].Order)
-		navEntry.SignersSigningStatus4 = entity.MapSigningStatus(signers[3].Status)
-		if signers[3].SignedAt != nil {
-			navEntry.SignersSigningDate4 = *signers[3].SignedAt
-		}
-	}
-
-	// Signer 5
-	if len(signers) > 4 {
-		navEntry.SignersName5 = signers[4].Name
-		navEntry.SignersEmail5 = signers[4].Email
-		navEntry.SignersOrder5 = strconv.Itoa(signers[4].Order)
-		navEntry.SignersSigningStatus5 = entity.MapSigningStatus(signers[4].Status)
-		if signers[4].SignedAt != nil {
-			navEntry.SignersSigningDate5 = *signers[4].SignedAt
-		}
-	}
-
-	return u.navClient.SendLogEntry(ctx, navEntry)
+	return u.navClient.UpdateLogEntry(ctx, navEntry)
 }
 
 // extractInvoiceNumber extracts invoice number from filename

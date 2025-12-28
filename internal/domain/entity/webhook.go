@@ -55,47 +55,54 @@ type DocumentInfo struct {
 	UpdatedAt      time.Time `json:"updated_at"`
 }
 
-// NAVLogEntry represents the log entry to send to NAV
+// NAVLogEntry represents the log entry to send to NAV (matches OData field names)
 type NAVLogEntry struct {
-	ID                      string `json:"id"`
-	InvoiceNumber           string `json:"invoice_number"`
-	Filename                string `json:"filename"`
-	EntryNo                 int    `json:"entry_no"`
-	LocationDocumentOut     string `json:"location_document_out"`
-	LocationDocumentProcess string `json:"location_document_process"`
-	LocationDocumentIn      string `json:"location_document_in"`
-	SigningStatus           string `json:"signing_status"`
-	StampingStatus          string `json:"stamping_status"`
+	ODataEtag       string `json:"@odata.etag,omitempty"`
+	EntryNo         int    `json:"Entry_No"`
+	InvoiceNo       string `json:"Invoice_No"`
+	Filename        string `json:"File_Name_Invoice_No"`
+	FilePathIn      string `json:"File_Path_In"`
+	FilePathProcess string `json:"File_Path_Process"`
+	FilePathOut     string `json:"File_Path_Out"`
+	SigningStatus   string `json:"Signing_Status"`
+	StampingStatus  string `json:"Stamping_Status"`
 	// Signer 1
-	SignersName1          string `json:"signersName1"`
-	SignersEmail1         string `json:"signersEmail1"`
-	SignersOrder1         string `json:"signersOrder1"`
-	SignersSigningStatus1 string `json:"signersSigningStatus1"`
-	SignersSigningDate1   string `json:"signersSigningDate1"`
+	Signer1Name          string `json:"Signer1_Name"`
+	Signer1Email         string `json:"Signer1_Email"`
+	Signer1Order         string `json:"Signer1_Order"`
+	Signer1SigningStatus string `json:"Signer1_Signing_Status"`
+	Signer1SigningDate   string `json:"Signer1_Signing_DateTime"`
 	// Signer 2
-	SignersName2          string `json:"signersName2"`
-	SignersEmail2         string `json:"signersEmail2"`
-	SignersOrder2         string `json:"signersOrder2"`
-	SignersSigningStatus2 string `json:"signersSigningStatus2"`
-	SignersSigningDate2   string `json:"signersSigningDate2"`
+	Signer2Name          string `json:"Signer2_Name"`
+	Signer2Email         string `json:"Signer2_Email"`
+	Signer2Order         string `json:"Signer2_Order"`
+	Signer2SigningStatus string `json:"Signer2_Signing_Status"`
+	Signer2SigningDate   string `json:"Signer2_Signing_DateTime"`
 	// Signer 3
-	SignersName3          string `json:"signersName3"`
-	SignersEmail3         string `json:"signersEmail3"`
-	SignersOrder3         string `json:"signersOrder3"`
-	SignersSigningStatus3 string `json:"signersSigningStatus3"`
-	SignersSigningDate3   string `json:"signersSigningDate3"`
-	// Signer 4
-	SignersName4          string `json:"signersName4"`
-	SignersEmail4         string `json:"signersEmail4"`
-	SignersOrder4         string `json:"signersOrder4"`
-	SignersSigningStatus4 string `json:"signersSigningStatus4"`
-	SignersSigningDate4   string `json:"signersSigningDate4"`
-	// Signer 5
-	SignersName5          string `json:"signersName5"`
-	SignersEmail5         string `json:"signersEmail5"`
-	SignersOrder5         string `json:"signersOrder5"`
-	SignersSigningStatus5 string `json:"signersSigningStatus5"`
-	SignersSigningDate5   string `json:"signersSigningDate5"`
+	Signer3Name          string `json:"Signer3_Name"`
+	Signer3Email         string `json:"Signer3_Email"`
+	Signer3Order         string `json:"Signer3_Order"`
+	Signer3SigningStatus string `json:"Signer3_Signing_Status"`
+	Signer3SigningDate   string `json:"Signer3_Signing_DateTime"`
+	// Signer 4 (optional, not in current API but for future use)
+	Signer4Name          string `json:"Signer4_Name,omitempty"`
+	Signer4Email         string `json:"Signer4_Email,omitempty"`
+	Signer4Order         string `json:"Signer4_Order,omitempty"`
+	Signer4SigningStatus string `json:"Signer4_Signing_Status,omitempty"`
+	Signer4SigningDate   string `json:"Signer4_Signing_DateTime,omitempty"`
+	// Signer 5 (optional)
+	Signer5Name          string `json:"Signer5_Name,omitempty"`
+	Signer5Email         string `json:"Signer5_Email,omitempty"`
+	Signer5Order         string `json:"Signer5_Order,omitempty"`
+	Signer5SigningStatus string `json:"Signer5_Signing_Status,omitempty"`
+	Signer5SigningDate   string `json:"Signer5_Signing_DateTime,omitempty"`
+	// ETag for update operations
+	ETag string `json:"ETag,omitempty"`
+}
+
+// NAVLogEntryResponse represents the response when getting a log entry
+type NAVLogEntryResponse struct {
+	Value []NAVLogEntry `json:"value"`
 }
 
 // MapSigningStatus maps Mekari signing status to NAV status

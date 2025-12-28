@@ -40,17 +40,83 @@ func NewClient(cfg *config.Config, logger *zap.Logger) *Client {
 	}
 }
 
-// SendLogEntry sends a log entry to NAV
-func (c *Client) SendLogEntry(ctx context.Context, entry *entity.NAVLogEntry) error {
+// GetLogEntry gets a log entry from NAV by Entry_No
+func (c *Client) GetLogEntry(ctx context.Context, entryNo int) (*entity.NAVLogEntry, error) {
 	if !c.config.NAV.Enabled {
-		c.logger.Debug("NAV integration disabled, skipping log entry")
+		return nil, nil
+	}
+
+	// Build URL with company and Entry_No parameter
+	apiURL := fmt.Sprintf("%s/ODataV4/Company('%s')/Api_MekariInvoiceLogEntries(Entry_No=%d)",
+		c.config.NAV.BaseURL,
+		url.PathEscape(c.config.NAV.Company),
+		entryNo,
+	)
+
+	c.logger.Info("Getting log entry from NAV",
+		zap.String("url", apiURL),
+		zap.Int("entry_no", entryNo),
+	)
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create NAV request: %w", err)
+	}
+
+	auth := base64.StdEncoding.EncodeToString([]byte(c.config.NAV.Username + ":" + c.config.NAV.Password))
+	req.Header.Set("Authorization", "Basic "+auth)
+	req.Header.Set("If-Match", "*")
+	req.Header.Set("Content-Type", "application/json;EEE754Compatible=true")
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get NAV log entry: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read NAV response: %w", err)
+	}
+
+	c.logger.Info("NAV GetLogEntry response",
+		zap.Int("status_code", resp.StatusCode),
+		zap.String("body", string(respBody)),
+	)
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("NAV get entry failed: status=%d, body=%s", resp.StatusCode, string(respBody))
+	}
+
+	var entry entity.NAVLogEntry
+	if err := json.Unmarshal(respBody, &entry); err != nil {
+		return nil, fmt.Errorf("failed to parse NAV log entry: %w", err)
+	}
+
+	return &entry, nil
+}
+
+// UpdateLogEntry updates a log entry in NAV using PATCH
+func (c *Client) UpdateLogEntry(ctx context.Context, entry *entity.NAVLogEntry) error {
+	if !c.config.NAV.Enabled {
+		c.logger.Debug("NAV integration disabled, skipping log entry update")
 		return nil
 	}
 
-	// Build URL with company parameter
-	apiURL := fmt.Sprintf("%s/ODataV4/Company('%s')/Api_MekariInvoiceLogEntries",
+	// First, get the existing entry to retrieve @odata.etag
+	existingEntry, err := c.GetLogEntry(ctx, entry.EntryNo)
+	if err != nil {
+		return fmt.Errorf("failed to get existing entry for etag: %w", err)
+	}
+
+	// Copy the @odata.etag from existing entry
+	entry.ODataEtag = existingEntry.ODataEtag
+
+	// Build URL with company and Entry_No parameter
+	apiURL := fmt.Sprintf("%s/ODataV4/Company('%s')/Api_MekariInvoiceLogEntries(Entry_No=%d)",
 		c.config.NAV.BaseURL,
 		url.PathEscape(c.config.NAV.Company),
+		entry.EntryNo,
 	)
 
 	// Marshal request body
@@ -59,16 +125,17 @@ func (c *Client) SendLogEntry(ctx context.Context, entry *entity.NAVLogEntry) er
 		return fmt.Errorf("failed to marshal NAV log entry: %w", err)
 	}
 
-	c.logger.Info("Sending log entry to NAV",
+	c.logger.Info("Updating log entry in NAV (PATCH)",
 		zap.String("url", apiURL),
-		zap.String("document_id", entry.ID),
-		zap.String("invoice_number", entry.InvoiceNumber),
+		zap.Int("entry_no", entry.EntryNo),
+		zap.String("invoice_no", entry.InvoiceNo),
 		zap.String("signing_status", entry.SigningStatus),
 		zap.String("stamping_status", entry.StampingStatus),
+		zap.String("odata_etag", entry.ODataEtag),
 	)
 
-	// Create request
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, bytes.NewBuffer(reqBody))
+	// Create PATCH request
+	req, err := http.NewRequestWithContext(ctx, http.MethodPatch, apiURL, bytes.NewBuffer(reqBody))
 	if err != nil {
 		return fmt.Errorf("failed to create NAV request: %w", err)
 	}
@@ -81,7 +148,7 @@ func (c *Client) SendLogEntry(ctx context.Context, entry *entity.NAVLogEntry) er
 	// Execute request
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
-		return fmt.Errorf("failed to send NAV log entry: %w", err)
+		return fmt.Errorf("failed to update NAV log entry: %w", err)
 	}
 	defer resp.Body.Close()
 
@@ -91,21 +158,26 @@ func (c *Client) SendLogEntry(ctx context.Context, entry *entity.NAVLogEntry) er
 		return fmt.Errorf("failed to read NAV response: %w", err)
 	}
 
-	c.logger.Info("NAV response",
+	c.logger.Info("NAV UpdateLogEntry response",
 		zap.Int("status_code", resp.StatusCode),
 		zap.String("body", string(respBody)),
 	)
 
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("NAV request failed: status=%d, body=%s", resp.StatusCode, string(respBody))
+		return fmt.Errorf("NAV update failed: status=%d, body=%s", resp.StatusCode, string(respBody))
 	}
 
-	c.logger.Info("Successfully sent log entry to NAV",
-		zap.String("document_id", entry.ID),
-		zap.String("invoice_number", entry.InvoiceNumber),
+	c.logger.Info("Successfully updated log entry in NAV",
+		zap.Int("entry_no", entry.EntryNo),
+		zap.String("invoice_no", entry.InvoiceNo),
 	)
 
 	return nil
+}
+
+// SendLogEntry sends a log entry to NAV (legacy - now calls UpdateLogEntry)
+func (c *Client) SendLogEntry(ctx context.Context, entry *entity.NAVLogEntry) error {
+	return c.UpdateLogEntry(ctx, entry)
 }
 
 // GetSetup fetches the Mekari setup configuration from NAV

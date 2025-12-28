@@ -90,12 +90,12 @@ func (r *esignRepository) GlobalRequestSign(ctx context.Context, email string, r
 	var err error
 
 	// Find and load document from ready folder by invoice number
-	if navSetup != nil && navSetup.FileLocationIn != "" {
+	if navSetup != nil && navSetup.FileLocationOut != "" {
 		r.logger.Info("Using NAV Setup paths",
-			zap.String("ready_path", navSetup.FileLocationIn),
+			zap.String("ready_path", navSetup.FileLocationOut),
 			zap.String("progress_path", navSetup.FileLocationProcess),
 		)
-		base64Doc, filename, err = r.docService.FindDocumentByInvoiceNumberWithPath(req.InvoiceNumber, navSetup.FileLocationIn)
+		base64Doc, filename, err = r.docService.FindDocumentByInvoiceNumberWithPath(req.InvoiceNumber, navSetup.FileLocationOut)
 	} else {
 		r.logger.Info("Using config paths (NAV Setup not available)")
 		base64Doc, filename, err = r.docService.FindDocumentByInvoiceNumber(req.InvoiceNumber)
@@ -172,8 +172,8 @@ func (r *esignRepository) GlobalRequestSign(ctx context.Context, email string, r
 	}
 
 	// Move document from ready to progress folder after successful upload
-	if navSetup != nil && navSetup.FileLocationIn != "" && navSetup.FileLocationProcess != "" {
-		if err := r.docService.MoveToProgressWithPath(filename, navSetup.FileLocationIn, navSetup.FileLocationProcess); err != nil {
+	if navSetup != nil && navSetup.FileLocationOut != "" && navSetup.FileLocationProcess != "" {
+		if err := r.docService.MoveToProgressWithPath(filename, navSetup.FileLocationOut, navSetup.FileLocationProcess); err != nil {
 			r.logger.Warn("Failed to move document to progress",
 				zap.String("filename", filename),
 				zap.Error(err),
