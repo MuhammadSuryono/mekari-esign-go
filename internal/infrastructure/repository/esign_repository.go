@@ -106,6 +106,15 @@ func (r *esignRepository) GlobalRequestSign(ctx context.Context, email string, r
 
 	// Convert SignerRequest to MekariSigner format with annotations
 	mekariSigners := make([]entity.MekariSigner, len(req.Signers))
+
+	// Calculate element size based on number of signers
+	elementWidth, elementHeight := calculateSignatureSize(len(req.Signers))
+	r.logger.Info("Signature size calculated",
+		zap.Int("signer_count", len(req.Signers)),
+		zap.Float64("element_width", elementWidth),
+		zap.Float64("element_height", elementHeight),
+	)
+
 	for i, signer := range req.Signers {
 		// Build annotation from signature position
 		annotations := []entity.SignerAnnotation{}
@@ -122,8 +131,8 @@ func (r *esignRepository) GlobalRequestSign(ctx context.Context, email string, r
 				Page:          page,
 				PositionX:     signer.SignaturePositions.X,
 				PositionY:     signer.SignaturePositions.Y,
-				ElementWidth:  entity.DefaultElementWidth,
-				ElementHeight: entity.DefaultElementHeight,
+				ElementWidth:  elementWidth,
+				ElementHeight: elementHeight,
 				CanvasWidth:   entity.DefaultCanvasWidth,
 				CanvasHeight:  entity.DefaultCanvasHeight,
 				AutoFields:    entity.DefaultAutoFields,
@@ -189,4 +198,23 @@ func (r *esignRepository) GlobalRequestSign(ctx context.Context, email string, r
 	}
 
 	return &response, nil
+}
+
+// calculateSignatureSize returns the appropriate signature element size based on number of signers
+// More signers = smaller signature to fit all on the document
+func calculateSignatureSize(signerCount int) (width, height float64) {
+	switch {
+	case signerCount <= 1:
+		// 1 signer: large size
+		return 180.0, 140.0
+	case signerCount == 2:
+		// 2 signers: medium size
+		return 150.0, 120.0
+	case signerCount == 3:
+		// 3 signers: compact size
+		return 130.0, 100.0
+	default:
+		// 4+ signers: small size
+		return 110.0, 85.0
+	}
 }

@@ -148,8 +148,8 @@ type SignerStatus struct {
 
 // Default values for annotations
 const (
-	DefaultElementWidth  = 120.0
-	DefaultElementHeight = 100.0
+	DefaultElementWidth  = 180.0 // Signature width (increased from 120 for better visibility)
+	DefaultElementHeight = 140.0 // Signature height (increased from 100 for better visibility)
 	DefaultCanvasWidth   = 595.0 // A4 width in points
 	DefaultCanvasHeight  = 841.0 // A4 height in points
 )
