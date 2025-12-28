@@ -552,10 +552,10 @@ func (u *webhookUsecase) sendNAVLogEntry(ctx context.Context, payload *entity.We
 	signers := payload.Data.Attributes.Signers
 
 	// Signer 1
-	if len(signers) > 0 {
-		navEntry.Signer1Name = signers[0].Name
-		navEntry.Signer1Email = signers[0].Email
-		navEntry.Signer1Order = strconv.Itoa(signers[0].Order)
+	if len(signers) > 0 && navEntry.StampingStatus != "Completed" {
+		//navEntry.Signer1Name = signers[0].Name
+		//navEntry.Signer1Email = signers[0].Email
+		//navEntry.Signer1Order = strconv.Itoa(signers[0].Order)
 		navEntry.Signer1SigningStatus = entity.MapSigningStatus(signers[0].Status)
 		if signers[0].SignedAt != nil {
 			navEntry.Signer1SigningDate = *signers[0].SignedAt
@@ -565,10 +565,10 @@ func (u *webhookUsecase) sendNAVLogEntry(ctx context.Context, payload *entity.We
 	}
 
 	// Signer 2
-	if len(signers) > 1 {
-		navEntry.Signer2Name = signers[1].Name
-		navEntry.Signer2Email = signers[1].Email
-		navEntry.Signer2Order = strconv.Itoa(signers[1].Order)
+	if len(signers) > 1 && navEntry.StampingStatus != "Completed" {
+		//navEntry.Signer2Name = signers[1].Name
+		//navEntry.Signer2Email = signers[1].Email
+		//navEntry.Signer2Order = strconv.Itoa(signers[1].Order)
 		navEntry.Signer2SigningStatus = entity.MapSigningStatus(signers[1].Status)
 		if signers[1].SignedAt != nil {
 			navEntry.Signer2SigningDate = *signers[1].SignedAt
@@ -578,10 +578,10 @@ func (u *webhookUsecase) sendNAVLogEntry(ctx context.Context, payload *entity.We
 	}
 
 	// Signer 3
-	if len(signers) > 2 {
-		navEntry.Signer3Name = signers[2].Name
-		navEntry.Signer3Email = signers[2].Email
-		navEntry.Signer3Order = strconv.Itoa(signers[2].Order)
+	if len(signers) > 2 && navEntry.StampingStatus != "Completed" {
+		//navEntry.Signer3Name = signers[2].Name
+		//navEntry.Signer3Email = signers[2].Email
+		//navEntry.Signer3Order = strconv.Itoa(signers[2].Order)
 		navEntry.Signer3SigningStatus = entity.MapSigningStatus(signers[2].Status)
 		if signers[2].SignedAt != nil {
 			navEntry.Signer3SigningDate = *signers[2].SignedAt
