@@ -4,18 +4,22 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	"go.uber.org/zap"
 
 	"mekari-esign/internal/config"
 	"mekari-esign/internal/domain/entity"
 	"mekari-esign/internal/domain/repository"
+	"mekari-esign/internal/infrastructure/nav"
 	"mekari-esign/internal/infrastructure/redis"
 )
 
 const (
 	// Redis key prefix for document tracking
 	documentKeyPrefix = "mekari:document:"
+	// Redis key prefix for NAV setup cache (by entry_no)
+	navSetupPrefix = "mekari:nav_setup:"
 )
 
 // DocumentMapping stores document info for webhook processing
@@ -40,15 +44,17 @@ type esignUsecase struct {
 	config       *config.Config
 	repo         repository.EsignRepository
 	oauthUsecase OAuthUsecase
+	navClient    *nav.Client
 	redisClient  *redis.RedisClient
 	logger       *zap.Logger
 }
 
-func NewEsignUsecase(cfg *config.Config, repo repository.EsignRepository, oauthUsecase OAuthUsecase, redisClient *redis.RedisClient, logger *zap.Logger) EsignUsecase {
+func NewEsignUsecase(cfg *config.Config, repo repository.EsignRepository, oauthUsecase OAuthUsecase, navClient *nav.Client, redisClient *redis.RedisClient, logger *zap.Logger) EsignUsecase {
 	return &esignUsecase{
 		config:       cfg,
 		repo:         repo,
 		oauthUsecase: oauthUsecase,
+		navClient:    navClient,
 		redisClient:  redisClient,
 		logger:       logger,
 	}
@@ -105,6 +111,14 @@ func (u *esignUsecase) GlobalRequestSign(ctx context.Context, req *entity.Global
 		zap.String("invoice_number", req.InvoiceNumber),
 		zap.Int("signers_count", len(req.Signers)),
 	)
+
+	// Fetch and cache NAV setup at the beginning (entry_no = 1 for new requests)
+	entryNo := req.EntryNo
+	if err := u.fetchAndCacheNAVSetup(ctx, entryNo); err != nil {
+		u.logger.Warn("Failed to fetch NAV setup, will use config fallback",
+			zap.Error(err),
+		)
+	}
 
 	// Validate email (only required for OAuth2)
 	if u.config.Mekari.IsOAuth2() && req.Email == "" {
@@ -197,7 +211,7 @@ func (u *esignUsecase) GlobalRequestSign(ctx context.Context, req *entity.Global
 		Filename:         response.Data.Attributes.Filename,
 		StampPositions:   req.StampPositions,
 		DocumentDeadline: req.DocumentDeadline,
-		EntryNo:          1,
+		EntryNo:          req.EntryNo,
 	}
 	mappingJSON, _ := json.Marshal(mapping)
 	if err := u.redisClient.Set(ctx, documentKey, string(mappingJSON), 0); err != nil {
@@ -240,4 +254,41 @@ func (u *esignUsecase) GetDocumentMapping(ctx context.Context, documentID string
 	}
 
 	return &mapping, nil
+}
+
+// fetchAndCacheNAVSetup fetches NAV setup and caches it to Redis by entry_no
+func (u *esignUsecase) fetchAndCacheNAVSetup(ctx context.Context, entryNo int) error {
+	cacheKey := navSetupPrefix + strconv.Itoa(entryNo)
+
+	// Check if already cached
+	cached, err := u.redisClient.Get(ctx, cacheKey)
+	if err == nil && cached != "" {
+		u.logger.Debug("NAV setup already cached", zap.Int("entry_no", entryNo))
+		return nil
+	}
+
+	// Fetch from NAV
+	setup, err := u.navClient.GetSetup(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to fetch NAV setup: %w", err)
+	}
+	if setup == nil {
+		return fmt.Errorf("NAV setup not available")
+	}
+
+	// Cache the setup (no expiration - permanent for this entry_no)
+	setupJSON, _ := json.Marshal(setup)
+	if err := u.redisClient.Set(ctx, cacheKey, string(setupJSON), 0); err != nil {
+		return fmt.Errorf("failed to cache NAV setup: %w", err)
+	}
+
+	u.logger.Info("NAV setup fetched and cached",
+		zap.Int("entry_no", entryNo),
+		zap.String("key", cacheKey),
+		zap.String("file_location_in", setup.FileLocationIn),
+		zap.String("file_location_process", setup.FileLocationProcess),
+		zap.String("file_location_out", setup.FileLocationOut),
+	)
+
+	return nil
 }

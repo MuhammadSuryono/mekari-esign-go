@@ -2,6 +2,7 @@ package entity
 
 // GlobalSignRequest represents the incoming request from client
 type GlobalSignRequest struct {
+	EntryNo          int               `json:"entry_no"`                    // Entry number for tracking
 	Email            string            `json:"email"`                       // User email for OAuth token
 	InvoiceNumber    string            `json:"invoice_number,omitempty"`    // Invoice number reference
 	Signers          []SignerRequest   `json:"signers"`                     // List of signers

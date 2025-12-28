@@ -2,27 +2,57 @@ package repository
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"strconv"
+
+	"go.uber.org/zap"
 
 	"mekari-esign/internal/config"
 	"mekari-esign/internal/domain/entity"
 	"mekari-esign/internal/domain/repository"
 	"mekari-esign/internal/infrastructure/document"
 	"mekari-esign/internal/infrastructure/httpclient"
+	"mekari-esign/internal/infrastructure/redis"
+)
+
+const (
+	navSetupPrefix = "mekari:nav_setup:"
 )
 
 type esignRepository struct {
-	config     *config.Config
-	client     httpclient.HTTPClient
-	docService document.DocumentService
+	config      *config.Config
+	client      httpclient.HTTPClient
+	docService  document.DocumentService
+	redisClient *redis.RedisClient
+	logger      *zap.Logger
 }
 
-func NewEsignRepository(cfg *config.Config, client httpclient.HTTPClient, docService document.DocumentService) repository.EsignRepository {
+func NewEsignRepository(cfg *config.Config, client httpclient.HTTPClient, docService document.DocumentService, redisClient *redis.RedisClient, logger *zap.Logger) repository.EsignRepository {
 	return &esignRepository{
-		config:     cfg,
-		client:     client,
-		docService: docService,
+		config:      cfg,
+		client:      client,
+		docService:  docService,
+		redisClient: redisClient,
+		logger:      logger,
 	}
+}
+
+// getNAVSetup gets NAV setup from Redis cache
+func (r *esignRepository) getNAVSetup(ctx context.Context, entryNo int) *entity.NAVSetup {
+	cacheKey := navSetupPrefix + strconv.Itoa(entryNo)
+
+	cached, err := r.redisClient.Get(ctx, cacheKey)
+	if err != nil || cached == "" {
+		return nil
+	}
+
+	var setup entity.NAVSetup
+	if err := json.Unmarshal([]byte(cached), &setup); err != nil {
+		return nil
+	}
+
+	return &setup
 }
 
 func (r *esignRepository) GetProfile(ctx context.Context, email string) (*entity.Profile, error) {
@@ -53,8 +83,23 @@ func (r *esignRepository) GetDocuments(ctx context.Context, email string, page, 
 func (r *esignRepository) GlobalRequestSign(ctx context.Context, email string, req *entity.GlobalSignRequest) (*entity.GlobalSignResponse, error) {
 	var response entity.GlobalSignResponse
 
+	// Get NAV setup for folder paths
+	navSetup := r.getNAVSetup(ctx, req.EntryNo)
+
+	var base64Doc, filename string
+	var err error
+
 	// Find and load document from ready folder by invoice number
-	base64Doc, filename, err := r.docService.FindDocumentByInvoiceNumber(req.InvoiceNumber)
+	if navSetup != nil && navSetup.FileLocationIn != "" {
+		r.logger.Info("Using NAV Setup paths",
+			zap.String("ready_path", navSetup.FileLocationIn),
+			zap.String("progress_path", navSetup.FileLocationProcess),
+		)
+		base64Doc, filename, err = r.docService.FindDocumentByInvoiceNumberWithPath(req.InvoiceNumber, navSetup.FileLocationIn)
+	} else {
+		r.logger.Info("Using config paths (NAV Setup not available)")
+		base64Doc, filename, err = r.docService.FindDocumentByInvoiceNumber(req.InvoiceNumber)
+	}
 	if err != nil {
 		return nil, fmt.Errorf("failed to find document: %w", err)
 	}
@@ -116,7 +161,7 @@ func (r *esignRepository) GlobalRequestSign(ctx context.Context, email string, r
 		Signers:          mekariSigners,
 		CallbackURL:      callbackURL,
 		DocumentDeadline: req.DocumentDeadline,
-		EntryNo:          1,
+		EntryNo:          req.EntryNo,
 	}
 
 	reqCtx := &httpclient.RequestContext{Email: email}
@@ -127,10 +172,20 @@ func (r *esignRepository) GlobalRequestSign(ctx context.Context, email string, r
 	}
 
 	// Move document from ready to progress folder after successful upload
-	if err := r.docService.MoveToProgress(filename); err != nil {
-		// Log warning but don't fail the request
-		// The document was already uploaded successfully
-		fmt.Printf("Warning: failed to move document to progress: %v\n", err)
+	if navSetup != nil && navSetup.FileLocationIn != "" && navSetup.FileLocationProcess != "" {
+		if err := r.docService.MoveToProgressWithPath(filename, navSetup.FileLocationIn, navSetup.FileLocationProcess); err != nil {
+			r.logger.Warn("Failed to move document to progress",
+				zap.String("filename", filename),
+				zap.Error(err),
+			)
+		}
+	} else {
+		if err := r.docService.MoveToProgress(filename); err != nil {
+			r.logger.Warn("Failed to move document to progress",
+				zap.String("filename", filename),
+				zap.Error(err),
+			)
+		}
 	}
 
 	return &response, nil

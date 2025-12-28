@@ -18,11 +18,20 @@ type DocumentService interface {
 	// Returns the base64 encoded content and filename
 	FindDocumentByInvoiceNumber(invoiceNumber string) (base64Content string, filename string, err error)
 
+	// FindDocumentByInvoiceNumberWithPath finds a document in the specified folder by invoice number
+	FindDocumentByInvoiceNumberWithPath(invoiceNumber string, readyPath string) (base64Content string, filename string, err error)
+
 	// FindFilenameInProgress finds a document filename in the progress folder by invoice number
 	FindFilenameInProgress(invoiceNumber string) (filename string, err error)
 
+	// FindFilenameInProgressWithPath finds a document filename in the specified progress folder
+	FindFilenameInProgressWithPath(invoiceNumber string, progressPath string) (filename string, err error)
+
 	// MoveToProgress moves a document from ready to progress folder
 	MoveToProgress(filename string) error
+
+	// MoveToProgressWithPath moves a document from specified ready to progress folder
+	MoveToProgressWithPath(filename string, readyPath, progressPath string) error
 
 	// MoveToFinish moves a document from progress to finish folder
 	MoveToFinish(filename string) error
@@ -30,8 +39,14 @@ type DocumentService interface {
 	// ReplaceFileInProgress replaces a file in progress folder with new content
 	ReplaceFileInProgress(filename string, content []byte) error
 
+	// ReplaceFileInProgressWithPath replaces a file in specified progress folder with new content
+	ReplaceFileInProgressWithPath(filename string, content []byte, progressPath string) error
+
 	// SaveToFinishAndDeleteProgress saves content to finish folder and deletes from progress
 	SaveToFinishAndDeleteProgress(filename string, content []byte) error
+
+	// SaveToFinishAndDeleteProgressWithPath saves content to specified finish folder and deletes from progress
+	SaveToFinishAndDeleteProgressWithPath(filename string, content []byte, finishPath, progressPath string) error
 
 	// SaveToReadyAndDeleteProgress saves content to ready folder and deletes from progress
 	SaveToReadyAndDeleteProgress(filename string, content []byte) error
@@ -343,6 +358,189 @@ func (s *documentService) SaveToReadyAndDeleteProgress(filename string, content 
 	} else {
 		s.logger.Info("File deleted from progress folder",
 			zap.String("filename", filename),
+		)
+	}
+
+	return nil
+}
+
+// ========== Methods with custom paths (from NAV Setup) ==========
+
+func (s *documentService) FindDocumentByInvoiceNumberWithPath(invoiceNumber string, readyPath string) (string, string, error) {
+	s.logger.Info("Searching for document with custom path",
+		zap.String("invoice_number", invoiceNumber),
+		zap.String("ready_path", readyPath),
+	)
+
+	// Ensure directory exists
+	if err := os.MkdirAll(readyPath, 0755); err != nil {
+		return "", "", fmt.Errorf("failed to ensure ready directory: %w", err)
+	}
+
+	// List files in ready folder
+	files, err := os.ReadDir(readyPath)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to read ready folder: %w", err)
+	}
+
+	extension := s.config.FileExtension
+	if extension == "" {
+		extension = ".pdf"
+	}
+
+	var matchedFile string
+	for _, file := range files {
+		if file.IsDir() {
+			continue
+		}
+
+		filename := file.Name()
+
+		if !strings.HasSuffix(strings.ToLower(filename), strings.ToLower(extension)) {
+			continue
+		}
+
+		if strings.Contains(filename, invoiceNumber) {
+			matchedFile = filename
+			s.logger.Info("Found matching document",
+				zap.String("invoice_number", invoiceNumber),
+				zap.String("filename", filename),
+			)
+			break
+		}
+	}
+
+	if matchedFile == "" {
+		return "", "", fmt.Errorf("document not found for invoice number: %s", invoiceNumber)
+	}
+
+	// Read file content
+	filePath := filepath.Join(readyPath, matchedFile)
+	content, err := os.ReadFile(filePath)
+	if err != nil {
+		return "", "", fmt.Errorf("failed to read document file: %w", err)
+	}
+
+	base64Content := base64.StdEncoding.EncodeToString(content)
+
+	s.logger.Info("Document loaded successfully",
+		zap.String("filename", matchedFile),
+		zap.Int("size_bytes", len(content)),
+	)
+
+	return base64Content, matchedFile, nil
+}
+
+func (s *documentService) FindFilenameInProgressWithPath(invoiceNumber string, progressPath string) (string, error) {
+	s.logger.Info("Searching for document in progress with custom path",
+		zap.String("invoice_number", invoiceNumber),
+		zap.String("progress_path", progressPath),
+	)
+
+	files, err := os.ReadDir(progressPath)
+	if err != nil {
+		return "", fmt.Errorf("failed to read progress folder: %w", err)
+	}
+
+	extension := s.config.FileExtension
+	if extension == "" {
+		extension = ".pdf"
+	}
+
+	for _, file := range files {
+		if file.IsDir() {
+			continue
+		}
+
+		filename := file.Name()
+
+		if !strings.HasSuffix(strings.ToLower(filename), strings.ToLower(extension)) {
+			continue
+		}
+
+		if strings.Contains(filename, invoiceNumber) {
+			return filename, nil
+		}
+	}
+
+	return "", fmt.Errorf("document not found in progress for invoice number: %s", invoiceNumber)
+}
+
+func (s *documentService) MoveToProgressWithPath(filename string, readyPath, progressPath string) error {
+	srcPath := filepath.Join(readyPath, filename)
+	dstPath := filepath.Join(progressPath, filename)
+
+	s.logger.Info("Moving document to progress with custom paths",
+		zap.String("filename", filename),
+		zap.String("from", srcPath),
+		zap.String("to", dstPath),
+	)
+
+	// Ensure progress directory exists
+	if err := os.MkdirAll(progressPath, 0755); err != nil {
+		return fmt.Errorf("failed to ensure progress directory: %w", err)
+	}
+
+	if err := os.Rename(srcPath, dstPath); err != nil {
+		return fmt.Errorf("failed to move document to progress: %w", err)
+	}
+
+	s.logger.Info("Document moved to progress successfully",
+		zap.String("filename", filename),
+	)
+
+	return nil
+}
+
+func (s *documentService) ReplaceFileInProgressWithPath(filename string, content []byte, progressPath string) error {
+	filePath := filepath.Join(progressPath, filename)
+
+	s.logger.Info("Replacing file in progress with custom path",
+		zap.String("filename", filename),
+		zap.String("path", filePath),
+		zap.Int("new_size_bytes", len(content)),
+	)
+
+	if err := os.WriteFile(filePath, content, 0644); err != nil {
+		return fmt.Errorf("failed to replace file in progress: %w", err)
+	}
+
+	s.logger.Info("File replaced successfully in progress",
+		zap.String("filename", filename),
+	)
+
+	return nil
+}
+
+func (s *documentService) SaveToFinishAndDeleteProgressWithPath(filename string, content []byte, finishPath, progressPath string) error {
+	progressFilePath := filepath.Join(progressPath, filename)
+	finishFilePath := filepath.Join(finishPath, filename)
+
+	s.logger.Info("Saving file to finish and deleting from progress with custom paths",
+		zap.String("filename", filename),
+		zap.String("progress_path", progressFilePath),
+		zap.String("finish_path", finishFilePath),
+		zap.Int("size_bytes", len(content)),
+	)
+
+	// Ensure finish directory exists
+	if err := os.MkdirAll(finishPath, 0755); err != nil {
+		return fmt.Errorf("failed to ensure finish directory: %w", err)
+	}
+
+	if err := os.WriteFile(finishFilePath, content, 0644); err != nil {
+		return fmt.Errorf("failed to save file to finish folder: %w", err)
+	}
+
+	s.logger.Info("File saved to finish folder",
+		zap.String("filename", filename),
+	)
+
+	// Delete file from progress folder
+	if err := os.Remove(progressFilePath); err != nil {
+		s.logger.Warn("Failed to delete file from progress folder",
+			zap.String("filename", filename),
+			zap.Error(err),
 		)
 	}
 
