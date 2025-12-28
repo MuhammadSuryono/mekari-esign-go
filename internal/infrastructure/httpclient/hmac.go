@@ -5,7 +5,6 @@ import (
 	"crypto/sha256"
 	"encoding/base64"
 	"fmt"
-	"log"
 	"net/http"
 	"net/url"
 	"time"
@@ -56,32 +55,12 @@ func (h *HMACSignature) GenerateSignature(method, fullURL string, date time.Time
 	authHeader = fmt.Sprintf(`hmac username="%s", algorithm="hmac-sha256", headers="date request-line", signature="%s"`,
 		h.ClientID, signature)
 
-	// Debug logging for HMAC signature
-	log.Printf("[HMAC-DEBUG] ==================== HMAC SIGNATURE DEBUG ====================")
-	log.Printf("[HMAC-DEBUG] Local Time      : %s", date.Format("2006-01-02 15:04:05 MST"))
-	log.Printf("[HMAC-DEBUG] UTC Time        : %s", date.UTC().Format("2006-01-02 15:04:05 MST"))
-	log.Printf("[HMAC-DEBUG] Date Header     : %s", dateHeader)
-	log.Printf("[HMAC-DEBUG] Method          : %s", method)
-	log.Printf("[HMAC-DEBUG] Full URL        : %s", fullURL)
-	log.Printf("[HMAC-DEBUG] Request Path    : %s", requestPath)
-	log.Printf("[HMAC-DEBUG] Request Line    : %s", requestLine)
-	log.Printf("[HMAC-DEBUG] Payload to Sign : %s", payload)
-	log.Printf("[HMAC-DEBUG] Client ID       : %s", h.ClientID)
-	log.Printf("[HMAC-DEBUG] Signature       : %s", signature)
-	log.Printf("[HMAC-DEBUG] Auth Header     : %s", authHeader)
-	log.Printf("[HMAC-DEBUG] ==============================================================")
-
 	return authHeader, dateHeader, nil
 }
 
 // SignRequest signs an HTTP request with HMAC-SHA256 signature
 func (h *HMACSignature) SignRequest(req *http.Request) error {
-	now := time.Now()
-	log.Printf("[HMAC-DEBUG] SignRequest called at: %s (Local) / %s (UTC)",
-		now.Format("2006-01-02 15:04:05 MST"),
-		now.UTC().Format("2006-01-02 15:04:05 UTC"))
-
-	authHeader, dateHeader, err := h.GenerateSignature(req.Method, req.URL.String(), now)
+	authHeader, dateHeader, err := h.GenerateSignature(req.Method, req.URL.String(), time.Now())
 	if err != nil {
 		return err
 	}

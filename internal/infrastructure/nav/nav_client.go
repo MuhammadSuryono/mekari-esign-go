@@ -40,60 +40,6 @@ func NewClient(cfg *config.Config, logger *zap.Logger) *Client {
 	}
 }
 
-// GetLogEntry gets a log entry from NAV by Entry_No
-func (c *Client) GetLogEntry(ctx context.Context, entryNo int) (*entity.NAVLogEntry, error) {
-	if !c.config.NAV.Enabled {
-		return nil, nil
-	}
-
-	// Build URL with company and Entry_No parameter
-	apiURL := fmt.Sprintf("%s/ODataV4/Company('%s')/Api_MekariInvoiceLogEntries?$filter=Entry_No eq %d",
-		c.config.NAV.BaseURL,
-		url.PathEscape(c.config.NAV.Company),
-		entryNo,
-	)
-
-	c.logger.Info("Getting log entry from NAV",
-		zap.String("url", apiURL),
-		zap.Int("entry_no", entryNo),
-	)
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, apiURL, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create NAV request: %w", err)
-	}
-
-	auth := base64.StdEncoding.EncodeToString([]byte(c.config.NAV.Username + ":" + c.config.NAV.Password))
-	req.Header.Set("Authorization", "Basic "+auth)
-
-	resp, err := c.httpClient.Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get NAV log entry: %w", err)
-	}
-	defer resp.Body.Close()
-
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read NAV response: %w", err)
-	}
-
-	c.logger.Info("NAV GetLogEntry response",
-		zap.Int("status_code", resp.StatusCode),
-		zap.String("body", string(respBody)),
-	)
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("NAV get entry failed: status=%d, body=%s", resp.StatusCode, string(respBody))
-	}
-
-	var entry entity.NAVLogEntry
-	if err := json.Unmarshal(respBody, &entry); err != nil {
-		return nil, fmt.Errorf("failed to parse NAV log entry: %w", err)
-	}
-
-	return &entry, nil
-}
-
 // UpdateLogEntry updates a log entry in NAV using PATCH
 func (c *Client) UpdateLogEntry(ctx context.Context, entry *entity.NAVLogEntry) error {
 	if !c.config.NAV.Enabled {
@@ -163,11 +109,6 @@ func (c *Client) UpdateLogEntry(ctx context.Context, entry *entity.NAVLogEntry) 
 	)
 
 	return nil
-}
-
-// SendLogEntry sends a log entry to NAV (legacy - now calls UpdateLogEntry)
-func (c *Client) SendLogEntry(ctx context.Context, entry *entity.NAVLogEntry) error {
-	return c.UpdateLogEntry(ctx, entry)
 }
 
 // GetSetup fetches the Mekari setup configuration from NAV

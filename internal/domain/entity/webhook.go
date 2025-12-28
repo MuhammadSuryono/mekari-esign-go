@@ -95,13 +95,6 @@ type NAVLogEntry struct {
 	Signer5Order         string `json:"Signer5_Order,omitempty"`
 	Signer5SigningStatus string `json:"Signer5_Signing_Status,omitempty"`
 	Signer5SigningDate   string `json:"Signer5_Signing_DateTime,omitempty"`
-	// ETag for update operations
-	ETag string `json:"ETag,omitempty"`
-}
-
-// NAVLogEntryResponse represents the response when getting a log entry
-type NAVLogEntryResponse struct {
-	Value []NAVLogEntry `json:"value"`
 }
 
 // MapSigningStatus maps Mekari signing status to NAV status
