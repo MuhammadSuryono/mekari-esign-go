@@ -16,6 +16,7 @@ import (
 	"mekari-esign/internal/config"
 	"mekari-esign/internal/domain/entity"
 	"mekari-esign/internal/infrastructure/document"
+	"mekari-esign/internal/infrastructure/httpclient"
 	"mekari-esign/internal/infrastructure/nav"
 	"mekari-esign/internal/infrastructure/oauth2"
 	"mekari-esign/internal/infrastructure/redis"
@@ -34,13 +35,14 @@ type WebhookUsecase interface {
 }
 
 type webhookUsecase struct {
-	config       *config.Config
-	redisClient  *redis.RedisClient
-	docService   document.DocumentService
-	tokenService oauth2.TokenService
-	navClient    *nav.Client
-	logger       *zap.Logger
-	httpClient   *http.Client
+	config        *config.Config
+	redisClient   *redis.RedisClient
+	docService    document.DocumentService
+	tokenService  oauth2.TokenService
+	hmacSignature *httpclient.HMACSignature
+	navClient     *nav.Client
+	logger        *zap.Logger
+	httpClient    *http.Client
 }
 
 func NewWebhookUsecase(
@@ -51,7 +53,7 @@ func NewWebhookUsecase(
 	navClient *nav.Client,
 	logger *zap.Logger,
 ) WebhookUsecase {
-	return &webhookUsecase{
+	uc := &webhookUsecase{
 		config:       cfg,
 		redisClient:  redisClient,
 		docService:   docService,
@@ -62,6 +64,16 @@ func NewWebhookUsecase(
 			Timeout: cfg.Mekari.Timeout,
 		},
 	}
+
+	// Initialize HMAC signature if using HMAC auth
+	if cfg.Mekari.IsHMAC() {
+		uc.hmacSignature = httpclient.NewHMACSignature(cfg.Mekari.HMAC.ClientID, cfg.Mekari.HMAC.ClientSecret)
+		logger.Info("WebhookUsecase initialized with HMAC authentication")
+	} else {
+		logger.Info("WebhookUsecase initialized with OAuth2 authentication")
+	}
+
+	return uc
 }
 
 func (u *webhookUsecase) ProcessWebhook(ctx context.Context, payload *entity.WebhookPayload) error {
@@ -163,6 +175,13 @@ func (u *webhookUsecase) ProcessWebhook(ctx context.Context, payload *entity.Web
 				zap.String("document_id", documentID),
 			)
 
+			if err := u.replaceDocumentInProgress(invoiceNumber, signedContent); err != nil {
+				u.logger.Error("Failed to replace document in progress",
+					zap.String("document_id", documentID),
+					zap.Error(err),
+				)
+			}
+
 			if err := u.requestStamping(ctx, email, signedContent, mapping); err != nil {
 				u.logger.Error("Failed to request stamping",
 					zap.String("document_id", documentID),
@@ -223,18 +242,13 @@ func (u *webhookUsecase) ProcessWebhook(ctx context.Context, payload *entity.Web
 }
 
 func (u *webhookUsecase) downloadDocument(ctx context.Context, email, docURL string) ([]byte, error) {
-	// Get access token for the email
-	accessToken, err := u.tokenService.GetAccessToken(ctx, email)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get access token: %w", err)
-	}
-
 	// Build full download URL
 	downloadURL := u.config.Mekari.BaseURL + docURL
 
 	u.logger.Info("Downloading document",
 		zap.String("url", downloadURL),
 		zap.String("email", email),
+		zap.String("auth_type", u.config.Mekari.AuthType),
 	)
 
 	// Create request
@@ -243,9 +257,23 @@ func (u *webhookUsecase) downloadDocument(ctx context.Context, email, docURL str
 		return nil, fmt.Errorf("failed to create download request: %w", err)
 	}
 
-	// Set headers
-	req.Header.Set("Authorization", "Bearer "+accessToken)
-	req.Header.Set("Date", time.Now().UTC().Format(http.TimeFormat))
+	// Set auth headers based on config
+	if u.config.Mekari.IsHMAC() {
+		// Use HMAC authentication
+		if err := u.hmacSignature.SignRequest(req); err != nil {
+			return nil, fmt.Errorf("failed to sign request with HMAC: %w", err)
+		}
+		u.logger.Debug("Using HMAC authentication for download request")
+	} else {
+		// Use OAuth2 authentication
+		accessToken, err := u.tokenService.GetAccessToken(ctx, email)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get access token: %w", err)
+		}
+		req.Header.Set("Authorization", "Bearer "+accessToken)
+		req.Header.Set("Date", time.Now().UTC().Format(http.TimeFormat))
+		u.logger.Debug("Using OAuth2 authentication for download request")
+	}
 
 	// Execute request
 	resp, err := u.httpClient.Do(req)
@@ -293,12 +321,6 @@ func (u *webhookUsecase) replaceDocumentInProgress(invoiceNumber string, content
 }
 
 func (u *webhookUsecase) requestStamping(ctx context.Context, email string, signedPDFContent []byte, mapping DocumentMapping) error {
-	// Get access token
-	accessToken, err := u.tokenService.GetAccessToken(ctx, email)
-	if err != nil {
-		return fmt.Errorf("failed to get access token: %w", err)
-	}
-
 	// Encode PDF to base64
 	base64Doc := base64.StdEncoding.EncodeToString(signedPDFContent)
 
@@ -341,6 +363,7 @@ func (u *webhookUsecase) requestStamping(ctx context.Context, email string, sign
 		zap.String("email", email),
 		zap.String("filename", mapping.Filename),
 		zap.Int("annotations_count", len(annotations)),
+		zap.String("auth_type", u.config.Mekari.AuthType),
 	)
 
 	// Create request
@@ -349,10 +372,26 @@ func (u *webhookUsecase) requestStamping(ctx context.Context, email string, sign
 		return fmt.Errorf("failed to create stamp request: %w", err)
 	}
 
-	// Set headers
-	req.Header.Set("Authorization", "Bearer "+accessToken)
+	// Set Content-Type header
 	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Date", time.Now().UTC().Format(http.TimeFormat))
+
+	// Set auth headers based on config
+	if u.config.Mekari.IsHMAC() {
+		// Use HMAC authentication
+		if err := u.hmacSignature.SignRequest(req); err != nil {
+			return fmt.Errorf("failed to sign request with HMAC: %w", err)
+		}
+		u.logger.Debug("Using HMAC authentication for stamp request")
+	} else {
+		// Use OAuth2 authentication
+		accessToken, err := u.tokenService.GetAccessToken(ctx, email)
+		if err != nil {
+			return fmt.Errorf("failed to get access token: %w", err)
+		}
+		req.Header.Set("Authorization", "Bearer "+accessToken)
+		req.Header.Set("Date", time.Now().UTC().Format(http.TimeFormat))
+		u.logger.Debug("Using OAuth2 authentication for stamp request")
+	}
 
 	// Execute request
 	resp, err := u.httpClient.Do(req)
