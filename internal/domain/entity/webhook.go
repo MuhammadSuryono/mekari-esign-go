@@ -66,11 +66,36 @@ type NAVLogEntry struct {
 	LocationDocumentIn      string `json:"location_document_in"`
 	SigningStatus           string `json:"signing_status"`
 	StampingStatus          string `json:"stamping_status"`
-	SignersName1            string `json:"signersName1"`
-	SignersEmail1           string `json:"signersEmail1"`
-	SignersOrder1           string `json:"signersOrder1"`
-	SignersSigningStatus1   string `json:"signersSigningStatus1"`
-	SignersSigningDate1     string `json:"signersSigningDate1"`
+	// Signer 1
+	SignersName1          string `json:"signersName1"`
+	SignersEmail1         string `json:"signersEmail1"`
+	SignersOrder1         string `json:"signersOrder1"`
+	SignersSigningStatus1 string `json:"signersSigningStatus1"`
+	SignersSigningDate1   string `json:"signersSigningDate1"`
+	// Signer 2
+	SignersName2          string `json:"signersName2"`
+	SignersEmail2         string `json:"signersEmail2"`
+	SignersOrder2         string `json:"signersOrder2"`
+	SignersSigningStatus2 string `json:"signersSigningStatus2"`
+	SignersSigningDate2   string `json:"signersSigningDate2"`
+	// Signer 3
+	SignersName3          string `json:"signersName3"`
+	SignersEmail3         string `json:"signersEmail3"`
+	SignersOrder3         string `json:"signersOrder3"`
+	SignersSigningStatus3 string `json:"signersSigningStatus3"`
+	SignersSigningDate3   string `json:"signersSigningDate3"`
+	// Signer 4
+	SignersName4          string `json:"signersName4"`
+	SignersEmail4         string `json:"signersEmail4"`
+	SignersOrder4         string `json:"signersOrder4"`
+	SignersSigningStatus4 string `json:"signersSigningStatus4"`
+	SignersSigningDate4   string `json:"signersSigningDate4"`
+	// Signer 5
+	SignersName5          string `json:"signersName5"`
+	SignersEmail5         string `json:"signersEmail5"`
+	SignersOrder5         string `json:"signersOrder5"`
+	SignersSigningStatus5 string `json:"signersSigningStatus5"`
+	SignersSigningDate5   string `json:"signersSigningDate5"`
 }
 
 // MapSigningStatus maps Mekari signing status to NAV status

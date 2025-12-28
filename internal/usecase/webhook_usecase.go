@@ -408,19 +408,6 @@ func (u *webhookUsecase) requestStamping(ctx context.Context, email string, sign
 
 // sendNAVLogEntry sends a log entry to NAV
 func (u *webhookUsecase) sendNAVLogEntry(ctx context.Context, payload *entity.WebhookPayload, mapping *DocumentMapping) error {
-	// Build signer info from payload
-	var signersName1, signersEmail1, signersOrder1, signersSigningStatus1, signersSigningDate1 string
-	if len(payload.Data.Attributes.Signers) > 0 {
-		signer := payload.Data.Attributes.Signers[0]
-		signersName1 = signer.Name
-		signersEmail1 = signer.Email
-		signersOrder1 = strconv.Itoa(signer.Order)
-		signersSigningStatus1 = entity.MapSigningStatus(signer.Status)
-		if signer.SignedAt != nil {
-			signersSigningDate1 = *signer.SignedAt
-		}
-	}
-
 	// Build NAV log entry
 	navEntry := &entity.NAVLogEntry{
 		ID:                      payload.Data.ID,
@@ -432,11 +419,64 @@ func (u *webhookUsecase) sendNAVLogEntry(ctx context.Context, payload *entity.We
 		LocationDocumentIn:      u.config.Document.BasePath + "/" + u.config.Document.ReadyFolder,
 		SigningStatus:           entity.MapSigningStatus(payload.Data.Attributes.SigningStatus),
 		StampingStatus:          entity.MapStampingStatus(payload.Data.Attributes.StampingStatus),
-		SignersName1:            signersName1,
-		SignersEmail1:           signersEmail1,
-		SignersOrder1:           signersOrder1,
-		SignersSigningStatus1:   signersSigningStatus1,
-		SignersSigningDate1:     signersSigningDate1,
+	}
+
+	// Populate signer info (up to 5 signers)
+	signers := payload.Data.Attributes.Signers
+
+	// Signer 1
+	if len(signers) > 0 {
+		navEntry.SignersName1 = signers[0].Name
+		navEntry.SignersEmail1 = signers[0].Email
+		navEntry.SignersOrder1 = strconv.Itoa(signers[0].Order)
+		navEntry.SignersSigningStatus1 = entity.MapSigningStatus(signers[0].Status)
+		if signers[0].SignedAt != nil {
+			navEntry.SignersSigningDate1 = *signers[0].SignedAt
+		}
+	}
+
+	// Signer 2
+	if len(signers) > 1 {
+		navEntry.SignersName2 = signers[1].Name
+		navEntry.SignersEmail2 = signers[1].Email
+		navEntry.SignersOrder2 = strconv.Itoa(signers[1].Order)
+		navEntry.SignersSigningStatus2 = entity.MapSigningStatus(signers[1].Status)
+		if signers[1].SignedAt != nil {
+			navEntry.SignersSigningDate2 = *signers[1].SignedAt
+		}
+	}
+
+	// Signer 3
+	if len(signers) > 2 {
+		navEntry.SignersName3 = signers[2].Name
+		navEntry.SignersEmail3 = signers[2].Email
+		navEntry.SignersOrder3 = strconv.Itoa(signers[2].Order)
+		navEntry.SignersSigningStatus3 = entity.MapSigningStatus(signers[2].Status)
+		if signers[2].SignedAt != nil {
+			navEntry.SignersSigningDate3 = *signers[2].SignedAt
+		}
+	}
+
+	// Signer 4
+	if len(signers) > 3 {
+		navEntry.SignersName4 = signers[3].Name
+		navEntry.SignersEmail4 = signers[3].Email
+		navEntry.SignersOrder4 = strconv.Itoa(signers[3].Order)
+		navEntry.SignersSigningStatus4 = entity.MapSigningStatus(signers[3].Status)
+		if signers[3].SignedAt != nil {
+			navEntry.SignersSigningDate4 = *signers[3].SignedAt
+		}
+	}
+
+	// Signer 5
+	if len(signers) > 4 {
+		navEntry.SignersName5 = signers[4].Name
+		navEntry.SignersEmail5 = signers[4].Email
+		navEntry.SignersOrder5 = strconv.Itoa(signers[4].Order)
+		navEntry.SignersSigningStatus5 = entity.MapSigningStatus(signers[4].Status)
+		if signers[4].SignedAt != nil {
+			navEntry.SignersSigningDate5 = *signers[4].SignedAt
+		}
 	}
 
 	return u.navClient.SendLogEntry(ctx, navEntry)
