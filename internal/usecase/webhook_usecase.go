@@ -32,6 +32,8 @@ const (
 type WebhookUsecase interface {
 	// ProcessWebhook processes the webhook callback from Mekari eSign
 	ProcessWebhook(ctx context.Context, payload *entity.WebhookPayload) error
+	RequestStamping(ctx context.Context, email string, signedPDFContent []byte, mapping DocumentMapping) error
+	DownloadDocument(ctx context.Context, email, docURL string) ([]byte, error)
 }
 
 type webhookUsecase struct {
@@ -175,7 +177,7 @@ func (u *webhookUsecase) ProcessWebhook(ctx context.Context, payload *entity.Web
 		)
 
 		// Download a signed document
-		signedContent, err := u.downloadDocument(ctx, email, payload.Data.Attributes.DocURL)
+		signedContent, err := u.DownloadDocument(ctx, email, payload.Data.Attributes.DocURL)
 		if err != nil {
 			u.logger.Error("Failed to download signed document",
 				zap.String("document_id", documentID),
@@ -185,7 +187,7 @@ func (u *webhookUsecase) ProcessWebhook(ctx context.Context, payload *entity.Web
 		}
 
 		// If stamping_status is "none" and we have stamp positions, request stamping
-		if payload.Data.Attributes.StampingStatus == "none" && mapping.StampPositions != nil {
+		if payload.Data.Attributes.StampingStatus == "none" && mapping.StampPositions != nil && mapping.Stamping {
 			u.logger.Info("Stamping required, sending stamp request",
 				zap.String("document_id", documentID),
 			)
@@ -197,7 +199,7 @@ func (u *webhookUsecase) ProcessWebhook(ctx context.Context, payload *entity.Web
 				)
 			}
 
-			if err := u.requestStamping(ctx, email, signedContent, mapping); err != nil {
+			if err := u.RequestStamping(ctx, email, signedContent, mapping); err != nil {
 				u.logger.Error("Failed to request stamping",
 					zap.String("document_id", documentID),
 					zap.Error(err),
@@ -227,7 +229,7 @@ func (u *webhookUsecase) ProcessWebhook(ctx context.Context, payload *entity.Web
 			originalFilename = payload.Data.Attributes.Filename
 		}
 
-		finalContent, err := u.downloadDocument(ctx, email, payload.Data.Attributes.DocURL)
+		finalContent, err := u.DownloadDocument(ctx, email, payload.Data.Attributes.DocURL)
 		if err != nil {
 			u.logger.Error("Failed to download final document",
 				zap.String("document_id", documentID),
@@ -263,7 +265,7 @@ func (u *webhookUsecase) ProcessWebhook(ctx context.Context, payload *entity.Web
 	return nil
 }
 
-func (u *webhookUsecase) downloadDocument(ctx context.Context, email, docURL string) ([]byte, error) {
+func (u *webhookUsecase) DownloadDocument(ctx context.Context, email, docURL string) ([]byte, error) {
 	// Build full download URL
 	downloadURL := u.config.Mekari.BaseURL + docURL
 
@@ -355,7 +357,7 @@ func (u *webhookUsecase) replaceDocumentInProgress(invoiceNumber string, content
 	return nil
 }
 
-func (u *webhookUsecase) requestStamping(ctx context.Context, email string, signedPDFContent []byte, mapping DocumentMapping) error {
+func (u *webhookUsecase) RequestStamping(ctx context.Context, email string, signedPDFContent []byte, mapping DocumentMapping) error {
 	// Encode PDF to base64
 	base64Doc := base64.StdEncoding.EncodeToString(signedPDFContent)
 

@@ -20,16 +20,21 @@ const (
 	documentKeyPrefix = "mekari:document:"
 	// Redis key prefix for NAV setup cache (by entry_no)
 	navSetupPrefix = "mekari:nav_setup:"
+	// Redis key prefix for entry_no cache (by document_id)
+	entryNoKeyPrefix = "mekari:entry_no:"
 )
 
 // DocumentMapping stores document info for webhook processing
 type DocumentMapping struct {
+	DocumentID       string                   `json:"document_id"`
 	Email            string                   `json:"email"`
 	InvoiceNumber    string                   `json:"invoice_number"`
 	Filename         string                   `json:"filename"`
 	StampPositions   *entity.StampPosition    `json:"stamp_positions,omitempty"`
 	DocumentDeadline *entity.DocumentDeadline `json:"document_deadline,omitempty"`
 	EntryNo          int                      `json:"entry_no"`
+	Signing          bool                     `json:"signing"`
+	Stamping         bool                     `json:"stamping"`
 }
 
 type EsignUsecase interface {
@@ -47,9 +52,10 @@ type esignUsecase struct {
 	navClient    *nav.Client
 	redisClient  *redis.RedisClient
 	logger       *zap.Logger
+	wbUsecase    WebhookUsecase
 }
 
-func NewEsignUsecase(cfg *config.Config, repo repository.EsignRepository, oauthUsecase OAuthUsecase, navClient *nav.Client, redisClient *redis.RedisClient, logger *zap.Logger) EsignUsecase {
+func NewEsignUsecase(cfg *config.Config, repo repository.EsignRepository, oauthUsecase OAuthUsecase, navClient *nav.Client, redisClient *redis.RedisClient, logger *zap.Logger, webhook WebhookUsecase) EsignUsecase {
 	return &esignUsecase{
 		config:       cfg,
 		repo:         repo,
@@ -57,6 +63,7 @@ func NewEsignUsecase(cfg *config.Config, repo repository.EsignRepository, oauthU
 		navClient:    navClient,
 		redisClient:  redisClient,
 		logger:       logger,
+		wbUsecase:    webhook,
 	}
 }
 
@@ -148,6 +155,10 @@ func (u *esignUsecase) GlobalRequestSign(ctx context.Context, req *entity.Global
 		}
 	}
 
+	if req.Signing == false && req.Stamping == false {
+		return u.stampingProcess(ctx, req, entryNo)
+	}
+
 	// Validate request
 	if len(req.Signers) == 0 {
 		return nil, fmt.Errorf("at least one signer is required")
@@ -203,6 +214,16 @@ func (u *esignUsecase) GlobalRequestSign(ctx context.Context, req *entity.Global
 	)
 
 	// Save document mapping to Redis for webhook processing
+	u.saveDocumentAndEntryNoToCache(ctx, req, response, entryNo)
+
+	return &entity.GlobalSignResult{
+		Success: true,
+		Data:    response.Data,
+		Message: "Document sign request created successfully",
+	}, nil
+}
+
+func (u *esignUsecase) saveDocumentAndEntryNoToCache(ctx context.Context, req *entity.GlobalSignRequest, response *entity.GlobalSignResponse, entryNo int) {
 	// Key: mekari:document:{document_id}, Value: JSON with all necessary info
 	documentKey := documentKeyPrefix + response.Data.ID
 	mapping := DocumentMapping{
@@ -212,6 +233,8 @@ func (u *esignUsecase) GlobalRequestSign(ctx context.Context, req *entity.Global
 		StampPositions:   req.StampPositions,
 		DocumentDeadline: req.DocumentDeadline,
 		EntryNo:          req.EntryNo,
+		Signing:          req.Signing,
+		Stamping:         req.Stamping,
 	}
 	mappingJSON, _ := json.Marshal(mapping)
 	if err := u.redisClient.Set(ctx, documentKey, string(mappingJSON), 0); err != nil {
@@ -231,10 +254,57 @@ func (u *esignUsecase) GlobalRequestSign(ctx context.Context, req *entity.Global
 		)
 	}
 
+	byEntryNoKey := entryNoKeyPrefix + strconv.Itoa(entryNo)
+	if err := u.redisClient.Set(ctx, byEntryNoKey, string(mappingJSON), 0); err != nil {
+		u.logger.Warn("Failed to save entry no mapping to Redis",
+			zap.String("document_id", response.Data.ID),
+			zap.String("email", req.Email),
+			zap.String("invoice_number", req.InvoiceNumber),
+			zap.Error(err),
+		)
+		// Don't fail the request, just log warning
+	}
+}
+
+func (u *esignUsecase) stampingProcess(ctx context.Context, req *entity.GlobalSignRequest, entryNo int) (*entity.GlobalSignResult, error) {
+	// Get document mapping from Redis using document ID
+	byEntryNoKey := entryNoKeyPrefix + strconv.Itoa(entryNo)
+	mappingData, err := u.redisClient.Get(ctx, byEntryNoKey)
+	if err != nil || mappingData == "" {
+		u.logger.Error("Failed to get initial entry no mapping from Redis",
+			zap.Int("entry_no", entryNo),
+			zap.Error(err),
+		)
+		return nil, fmt.Errorf("failed to get initial entry no mapping from Redis: %w", err)
+	}
+
+	// Parse document mapping
+	var mapping DocumentMapping
+	if err := json.Unmarshal([]byte(mappingData), &mapping); err != nil {
+		// Fallback: old format might be just email string
+		return nil, fmt.Errorf("failed to parse initial entry no mapping: %w", err)
+	}
+
+	signedContent, err := u.wbUsecase.DownloadDocument(ctx, req.Email, fmt.Sprintf("/documents/%s/download", mapping.DocumentID))
+	if err != nil {
+		u.logger.Error("Failed to download signed document",
+			zap.String("document_id", mapping.DocumentID),
+			zap.Error(err),
+		)
+		return nil, fmt.Errorf("failed to download signed document: %w", err)
+	}
+
+	if err := u.wbUsecase.RequestStamping(ctx, req.Email, signedContent, mapping); err != nil {
+		u.logger.Error("Failed to request stamping",
+			zap.String("document_id", mapping.DocumentID),
+			zap.Error(err),
+		)
+		return nil, fmt.Errorf("failed to request stamping: %w", err)
+	}
+
 	return &entity.GlobalSignResult{
 		Success: true,
-		Data:    response.Data,
-		Message: "Document sign request created successfully",
+		Message: "Document stamping request created successfully",
 	}, nil
 }
 

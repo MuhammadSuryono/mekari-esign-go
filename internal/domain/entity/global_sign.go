@@ -5,6 +5,8 @@ type GlobalSignRequest struct {
 	EntryNo          int               `json:"entry_no"`                    // Entry number for tracking
 	Email            string            `json:"email"`                       // User email for OAuth token
 	InvoiceNumber    string            `json:"invoice_number,omitempty"`    // Invoice number reference
+	Signing          bool              `json:"signing"`                     // Signing only
+	Stamping         bool              `json:"stamping"`                    // Stamping only
 	Signers          []SignerRequest   `json:"signers"`                     // List of signers
 	StampPositions   *StampPosition    `json:"stamp_positions,omitempty"`   // Stamp position (saved for later stamping)
 	DocumentDeadline *DocumentDeadline `json:"document_deadline,omitempty"` // Optional deadline settings
