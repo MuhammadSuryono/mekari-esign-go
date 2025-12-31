@@ -217,7 +217,7 @@ func (u *webhookUsecase) ProcessWebhook(ctx context.Context, payload *entity.Web
 		}
 	}
 
-	// Handle stamping completed - download final document and save to finish
+	// Handle stamping completed - download a final document and save to finish
 	if payload.Data.Attributes.StampingStatus == "success" {
 		u.logger.Info("Stamping completed, downloading final document",
 			zap.String("document_id", documentID),

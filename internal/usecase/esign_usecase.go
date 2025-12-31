@@ -227,6 +227,7 @@ func (u *esignUsecase) saveDocumentAndEntryNoToCache(ctx context.Context, req *e
 	// Key: mekari:document:{document_id}, Value: JSON with all necessary info
 	documentKey := documentKeyPrefix + response.Data.ID
 	mapping := DocumentMapping{
+		DocumentID:       response.Data.ID,
 		Email:            req.Email,
 		InvoiceNumber:    req.InvoiceNumber,
 		Filename:         response.Data.Attributes.Filename,
