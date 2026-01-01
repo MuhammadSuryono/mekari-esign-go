@@ -63,7 +63,6 @@ func (h *LogHandler) LogViewer(c *fiber.Ctx) error {
     <div class="search-box">
         <input type="text" id="invoiceInput" placeholder="Enter Invoice Number..." onkeypress="if(event.key==='Enter')searchLogs()">
         <button onclick="searchLogs()">🔎 Search</button>
-        <button onclick="loadAll()" class="btn-secondary">📋 Load All (50)</button>
     </div>
 
     <div id="stats" class="stats" style="display:none;">
@@ -192,6 +191,10 @@ func (h *LogHandler) LogViewer(c *fiber.Ctx) error {
         document.addEventListener('keydown', function(e) {
             if (e.key === 'Escape') closeModal();
         });
+
+		document.addEventListener('DOMContentLoaded', function () {
+			loadAll();
+		});
     </script>
 </body>
 </html>`

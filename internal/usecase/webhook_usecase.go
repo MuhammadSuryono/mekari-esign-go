@@ -262,6 +262,16 @@ func (u *webhookUsecase) ProcessWebhook(ctx context.Context, payload *entity.Web
 			zap.String("finish_path", finishPath),
 			zap.Int("size_bytes", len(finalContent)),
 		)
+
+		err = u.redisClient.Del(ctx, documentInfoKeyPrefix+documentID)
+		if err != nil {
+			u.logger.Error("Failed to delete document info from Redis", zap.Error(err))
+		}
+
+		err = u.redisClient.Del(ctx, entryNoKeyPrefix+strconv.Itoa(mapping.EntryNo))
+		if err != nil {
+			u.logger.Error("Failed to delete entry number mapping from Redis", zap.Error(err))
+		}
 	}
 
 	return nil
