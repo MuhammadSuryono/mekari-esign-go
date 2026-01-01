@@ -380,6 +380,11 @@ func (u *webhookUsecase) RequestStamping(ctx context.Context, email string, sign
 		mapping.StampPositions.Height = defaultHeight
 	}
 
+	if mapping.StampPositions.CanvasWidth == 0 {
+		mapping.StampPositions.CanvasWidth = entity.DefaultCanvasWidth
+		mapping.StampPositions.CanvasHeight = entity.DefaultCanvasHeight
+	}
+
 	// Build stamp annotation from saved stamp positions
 	annotations := []entity.StampAnnotation{}
 	if mapping.StampPositions != nil {
@@ -389,8 +394,8 @@ func (u *webhookUsecase) RequestStamping(ctx context.Context, email string, sign
 			PositionY:     mapping.StampPositions.Y,
 			ElementWidth:  mapping.StampPositions.Width, // Default e-meterai size
 			ElementHeight: mapping.StampPositions.Height,
-			CanvasWidth:   595, // A4 width
-			CanvasHeight:  841, // A4 height
+			CanvasWidth:   mapping.StampPositions.CanvasWidth,  // A4 width
+			CanvasHeight:  mapping.StampPositions.CanvasHeight, // A4 height
 			TypeOf:        "meterai",
 		})
 	}

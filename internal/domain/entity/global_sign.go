@@ -25,11 +25,13 @@ type SignerRequest struct {
 
 // SignaturePosition represents the position of signature on a document (client request)
 type SignaturePosition struct {
-	X      float64 `json:"x"` // X coordinate
-	Y      float64 `json:"y"` // Y coordinate
-	Width  float64 `json:"width,omitempty"`
-	Height float64 `json:"height,omitempty"`
-	Page   int     `json:"page,omitempty"` // Page number (1-based)
+	X            float64 `json:"x"` // X coordinate
+	Y            float64 `json:"y"` // Y coordinate
+	Width        float64 `json:"width,omitempty"`
+	Height       float64 `json:"height,omitempty"`
+	CanvasWidth  float64 `json:"canvas_width,omitempty"`
+	CanvasHeight float64 `json:"canvas_height,omitempty"`
+	Page         int     `json:"page,omitempty"` // Page number (1-based)
 }
 
 // DocumentDeadline represents optional deadline settings
@@ -42,11 +44,13 @@ type DocumentDeadline struct {
 // StampPosition represents the position of e-meterai stamp on document
 // This is stored temporarily and used later during stamping
 type StampPosition struct {
-	X      float64 `json:"x"` // X coordinate
-	Y      float64 `json:"y"` // Y coordinate
-	Width  float64 `json:"width,omitempty"`
-	Height float64 `json:"height,omitempty"`
-	Page   int     `json:"page,omitempty"` // Page number (1-based)
+	X            float64 `json:"x"` // X coordinate
+	Y            float64 `json:"y"` // Y coordinate
+	Width        float64 `json:"width,omitempty"`
+	Height       float64 `json:"height,omitempty"`
+	CanvasWidth  float64 `json:"canvas_width,omitempty"`
+	CanvasHeight float64 `json:"canvas_height,omitempty"`
+	Page         int     `json:"page,omitempty"` // Page number (1-based)
 }
 
 // ========== Mekari API Request Structures ==========
