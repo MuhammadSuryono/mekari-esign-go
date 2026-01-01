@@ -1,7 +1,6 @@
 package usecase
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -45,6 +44,7 @@ type webhookUsecase struct {
 	navClient     *nav.Client
 	logger        *zap.Logger
 	httpClient    *http.Client
+	localClient   httpclient.HTTPClient
 }
 
 func NewWebhookUsecase(
@@ -54,6 +54,7 @@ func NewWebhookUsecase(
 	tokenService oauth2.TokenService,
 	navClient *nav.Client,
 	logger *zap.Logger,
+	client httpclient.HTTPClient,
 ) WebhookUsecase {
 	uc := &webhookUsecase{
 		config:       cfg,
@@ -65,6 +66,7 @@ func NewWebhookUsecase(
 		httpClient: &http.Client{
 			Timeout: cfg.Mekari.Timeout,
 		},
+		localClient: client,
 	}
 
 	// Initialize HMAC signature if using HMAC auth
@@ -403,59 +405,16 @@ func (u *webhookUsecase) RequestStamping(ctx context.Context, email string, sign
 		zap.String("auth_type", u.config.Mekari.AuthType),
 	)
 
-	// Create request
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, stampURL, bytes.NewBuffer(reqBody))
-	if err != nil {
-		return fmt.Errorf("failed to create stamp request: %w", err)
+	reqCtx := &httpclient.RequestContext{
+		Email:     mapping.Email,
+		InvoiceNo: mapping.InvoiceNumber,
+		EntryNo:   mapping.EntryNo,
 	}
 
-	// Set Content-Type header
-	req.Header.Set("Content-Type", "application/json")
-
-	// Set auth headers based on config
-	if u.config.Mekari.IsHMAC() {
-		// Use HMAC authentication
-		if err := u.hmacSignature.SignRequest(req); err != nil {
-			return fmt.Errorf("failed to sign request with HMAC: %w", err)
-		}
-		u.logger.Debug("Using HMAC authentication for stamp request")
-	} else {
-		// Use OAuth2 authentication
-		accessToken, err := u.tokenService.GetAccessToken(ctx, email)
-		if err != nil {
-			return fmt.Errorf("failed to get access token: %w", err)
-		}
-		req.Header.Set("Authorization", "Bearer "+accessToken)
-		req.Header.Set("Date", time.Now().UTC().Format(http.TimeFormat))
-		u.logger.Debug("Using OAuth2 authentication for stamp request")
-	}
-
-	// Execute request
-	resp, err := u.httpClient.Do(req)
+	var stampResp entity.StampResponse
+	err = u.localClient.Post(ctx, reqCtx, "/documents/stamp", reqBody, &stampResp)
 	if err != nil {
 		return fmt.Errorf("failed to send stamp request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	// Read response
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read stamp response: %w", err)
-	}
-
-	u.logger.Info("Stamp request response",
-		zap.Int("status_code", resp.StatusCode),
-		zap.String("body", string(respBody)),
-	)
-
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("stamp request failed: status=%d, body=%s", resp.StatusCode, string(respBody))
-	}
-
-	// Parse response
-	var stampResp entity.StampResponse
-	if err := json.Unmarshal(respBody, &stampResp); err != nil {
-		return fmt.Errorf("failed to parse stamp response: %w", err)
 	}
 
 	u.logger.Info("Stamp request successful",
@@ -540,8 +499,7 @@ func (u *webhookUsecase) sendNAVLogEntry(ctx context.Context, payload *entity.We
 
 	// Build NAV log entry with OData field names
 	navEntry := &entity.NAVLogEntry{
-		EntryNo: mapping.EntryNo,
-		//InvoiceNo:       mapping.InvoiceNumber,
+		EntryNo:         mapping.EntryNo,
 		Filename:        payload.Data.Attributes.Filename,
 		FilePathIn:      locationIn,
 		FilePathProcess: locationProcess,

@@ -58,7 +58,7 @@ type DocumentInfo struct {
 // NAVLogEntry represents the log entry to send to NAV (matches OData field names)
 type NAVLogEntry struct {
 	EntryNo         int    `json:"Entry_No"`
-	InvoiceNo       string `json:"Invoice_No"`
+	InvoiceNo       string `json:"Invoice_No,omitempty"`
 	Filename        string `json:"File_Name_Invoice_No"`
 	FilePathIn      string `json:"File_Path_In"`
 	FilePathProcess string `json:"File_Path_Process"`

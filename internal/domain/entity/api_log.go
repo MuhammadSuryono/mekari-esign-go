@@ -6,6 +6,8 @@ import "time"
 type APILog struct {
 	ID           int64     `json:"id"`
 	Endpoint     string    `json:"endpoint"`
+	InvoiceNo    string    `json:"invoice_no"`
+	EntryNo      int       `json:"entry_no"`
 	Method       string    `json:"method"`
 	RequestBody  string    `json:"request_body"`
 	ResponseBody string    `json:"response_body"`

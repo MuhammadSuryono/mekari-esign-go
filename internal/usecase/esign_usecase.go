@@ -155,7 +155,7 @@ func (u *esignUsecase) GlobalRequestSign(ctx context.Context, req *entity.Global
 		}
 	}
 
-	if req.Signing == false && req.Stamping == false {
+	if req.Signing == false && req.Stamping == true {
 		return u.stampingProcess(ctx, req, entryNo)
 	}
 
@@ -276,7 +276,7 @@ func (u *esignUsecase) stampingProcess(ctx context.Context, req *entity.GlobalSi
 			zap.Int("entry_no", entryNo),
 			zap.Error(err),
 		)
-		return nil, fmt.Errorf("failed to get initial entry no mapping from Redis: %w", err)
+		return nil, fmt.Errorf("failed to stamping, Please sign first your document: %s", req.InvoiceNumber)
 	}
 
 	// Parse document mapping

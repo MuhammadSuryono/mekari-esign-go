@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"mime/multipart"
 	"net/http"
 	"regexp"
 	"strings"
@@ -39,8 +38,6 @@ type HTTPClient interface {
 	Get(ctx context.Context, reqCtx *RequestContext, path string, result interface{}) error
 	// Post performs POST request with configured auth method
 	Post(ctx context.Context, reqCtx *RequestContext, path string, body interface{}, result interface{}) error
-	// PostMultipart performs multipart POST request with configured auth method
-	PostMultipart(ctx context.Context, reqCtx *RequestContext, path string, fields map[string]string, files map[string]FileUpload, result interface{}) error
 	// Put performs PUT request with configured auth method
 	Put(ctx context.Context, reqCtx *RequestContext, path string, body interface{}, result interface{}) error
 	// Delete performs DELETE request with configured auth method
@@ -198,13 +195,10 @@ func (c *httpClient) logResponse(statusCode int, statusText string, duration tim
 }
 
 // saveAPILog saves the API request/response log to database
-func (c *httpClient) saveAPILog(ctx context.Context, method, endpoint string, requestBody []byte, responseBody []byte, statusCode int, duration time.Duration, email string) {
+func (c *httpClient) saveAPILog(ctx context.Context, method, endpoint string, requestBody []byte, responseBody []byte, statusCode int, duration time.Duration, reqCtx *RequestContext) {
 	if c.apiLogSaver == nil {
 		return
 	}
-
-	// Try to extract invoice_no from request body
-	//invoiceNo := extractInvoiceNo(requestBody)
 
 	// Truncate base64 in request body
 	reqBodyStr := ""
@@ -223,14 +217,15 @@ func (c *httpClient) saveAPILog(ctx context.Context, method, endpoint string, re
 	}
 
 	apiLog := &entity.APILog{
-		//InvoiceNo:    invoiceNo,
+		InvoiceNo:    reqCtx.InvoiceNo,
+		EntryNo:      reqCtx.EntryNo,
 		Endpoint:     endpoint,
 		Method:       method,
 		RequestBody:  reqBodyStr,
 		ResponseBody: respBodyStr,
 		StatusCode:   statusCode,
 		Duration:     duration.Milliseconds(),
-		Email:        email,
+		Email:        reqCtx.Email,
 		CreatedAt:    time.Now(),
 	}
 
@@ -243,35 +238,6 @@ func (c *httpClient) saveAPILog(ctx context.Context, method, endpoint string, re
 			)
 		}
 	}()
-
-	// Also send to NAV if enabled
-	//if c.navAPILogSender != nil {
-	//	go func() {
-	//		// Determine status description
-	//		statusDesc := "SUCCESS"
-	//		if statusCode < 200 || statusCode >= 300 {
-	//			statusDesc = "ERROR"
-	//		}
-	//
-	//		// Build body summary (combine request and response info)
-	//		bodySummary := fmt.Sprintf(`{"method":"%s","status_code":%d,"duration_ms":%d, "requester": %s}`,
-	//			method, statusCode, duration.Milliseconds(), email)
-	//
-	//		navLog := &entity.NAVAPILog{
-	//			StatusDescription: statusDesc,
-	//			DateTime:          time.Now().UTC().Format(time.RFC3339),
-	//			InvoiceNo:         endpoint, // Using endpoint as an identifier
-	//			Body:              bodySummary,
-	//		}
-	//
-	//		if err := c.navAPILogSender.SendAPILog(context.Background(), navLog); err != nil {
-	//			c.logger.Warn("Failed to send API log to NAV",
-	//				zap.String("endpoint", endpoint),
-	//				zap.Error(err),
-	//			)
-	//		}
-	//	}()
-	//}
 }
 
 // setAuthHeaders sets the appropriate authorization headers based on config
@@ -341,11 +307,7 @@ func (c *httpClient) doRequest(ctx context.Context, reqCtx *RequestContext, meth
 	c.logResponse(resp.StatusCode, resp.Status, duration, resp.Header, respBody)
 
 	// Save API log to database
-	email := ""
-	if reqCtx != nil {
-		email = reqCtx.Email
-	}
-	c.saveAPILog(ctx, method, fullURL, jsonBody, respBody, resp.StatusCode, duration, email)
+	c.saveAPILog(ctx, method, fullURL, jsonBody, respBody, resp.StatusCode, duration, reqCtx)
 
 	// Handle 401 Unauthorized - try to refresh token and retry (OAuth2 only)
 	if resp.StatusCode == http.StatusUnauthorized && !isRetry && c.config.Mekari.IsOAuth2() {
@@ -396,132 +358,4 @@ func (c *httpClient) Put(ctx context.Context, reqCtx *RequestContext, path strin
 
 func (c *httpClient) Delete(ctx context.Context, reqCtx *RequestContext, path string, result interface{}) error {
 	return c.doRequest(ctx, reqCtx, http.MethodDelete, path, nil, result, false)
-}
-
-// PostMultipart sends a multipart/form-data POST request
-func (c *httpClient) PostMultipart(ctx context.Context, reqCtx *RequestContext, path string, fields map[string]string, files map[string]FileUpload, result interface{}) error {
-	return c.doMultipartRequest(ctx, reqCtx, path, fields, files, result, false)
-}
-
-func (c *httpClient) doMultipartRequest(ctx context.Context, reqCtx *RequestContext, path string, fields map[string]string, files map[string]FileUpload, result interface{}, isRetry bool) error {
-	fullURL := c.baseURL + path
-
-	// Create multipart writer
-	var buf bytes.Buffer
-	writer := multipart.NewWriter(&buf)
-
-	// Add form fields
-	for key, value := range fields {
-		if err := writer.WriteField(key, value); err != nil {
-			return fmt.Errorf("failed to write field %s: %w", key, err)
-		}
-	}
-
-	// Add files
-	for fieldName, file := range files {
-		part, err := writer.CreateFormFile(fieldName, file.Filename)
-		if err != nil {
-			return fmt.Errorf("failed to create form file %s: %w", fieldName, err)
-		}
-		if _, err := part.Write(file.Content); err != nil {
-			return fmt.Errorf("failed to write file content %s: %w", fieldName, err)
-		}
-	}
-
-	// Close writer
-	if err := writer.Close(); err != nil {
-		return fmt.Errorf("failed to close multipart writer: %w", err)
-	}
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fullURL, &buf)
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-
-	// Set content type with boundary
-	req.Header.Set("Content-Type", writer.FormDataContentType())
-	req.Header.Set("Accept", "application/json")
-
-	// Set auth headers based on config
-	if err := c.setAuthHeaders(ctx, req, reqCtx); err != nil {
-		return err
-	}
-
-	// Build multipart body summary for logging
-	var bodySummary strings.Builder
-	bodySummary.WriteString("{fields: [")
-	fieldKeys := make([]string, 0, len(fields))
-	for k := range fields {
-		fieldKeys = append(fieldKeys, k)
-	}
-	bodySummary.WriteString(strings.Join(fieldKeys, ", "))
-	bodySummary.WriteString("], files: [")
-	fileKeys := make([]string, 0, len(files))
-	for k, f := range files {
-		fileKeys = append(fileKeys, fmt.Sprintf("%s(%s, %d bytes)", k, f.Filename, len(f.Content)))
-	}
-	bodySummary.WriteString(strings.Join(fileKeys, ", "))
-	bodySummary.WriteString("]}")
-
-	// Log request details
-	c.logRequest(http.MethodPost, fullURL, req.Header, []byte(bodySummary.String()))
-
-	startTime := time.Now()
-	resp, err := c.client.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to execute request: %w", err)
-	}
-	defer resp.Body.Close()
-
-	duration := time.Since(startTime)
-
-	// Read response body
-	respBody, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return fmt.Errorf("failed to read response body: %w", err)
-	}
-
-	// Log response details
-	c.logResponse(resp.StatusCode, resp.Status, duration, resp.Header, respBody)
-
-	// Save API log to database (for multipart, log the body summary)
-	multipartEmail := ""
-	if reqCtx != nil {
-		multipartEmail = reqCtx.Email
-	}
-	c.saveAPILog(ctx, http.MethodPost, fullURL, []byte(bodySummary.String()), respBody, resp.StatusCode, duration, multipartEmail)
-
-	// Handle 401 Unauthorized - try to refresh token and retry (OAuth2 only)
-	if resp.StatusCode == http.StatusUnauthorized && !isRetry && c.config.Mekari.IsOAuth2() {
-		c.logger.Info("Received 401 Unauthorized, attempting to refresh token",
-			zap.String("email", reqCtx.Email),
-		)
-
-		// Refresh token
-		_, err := c.tokenService.RefreshToken(ctx, reqCtx.Email)
-		if err != nil {
-			c.logger.Error("Failed to refresh token", zap.Error(err))
-			return ErrUnauthorized
-		}
-
-		// Retry request with new token
-		c.logger.Info("Token refreshed, retrying request",
-			zap.String("email", reqCtx.Email),
-		)
-		return c.doMultipartRequest(ctx, reqCtx, path, fields, files, result, true)
-	}
-
-	// Check for HTTP errors
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		return fmt.Errorf("API error: status=%d, body=%s", resp.StatusCode, string(respBody))
-	}
-
-	// Parse response
-	if result != nil && len(respBody) > 0 {
-		if err := json.Unmarshal(respBody, result); err != nil {
-			return fmt.Errorf("failed to unmarshal response: %w", err)
-		}
-	}
-
-	return nil
 }
