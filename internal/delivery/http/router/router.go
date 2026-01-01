@@ -18,6 +18,7 @@ type Router struct {
 	healthHandler  *handler.HealthHandler
 	oauthHandler   *handler.OAuthHandler
 	webhookHandler *handler.WebhookHandler
+	logHandler     *handler.LogHandler
 }
 
 func NewRouter(
@@ -26,6 +27,7 @@ func NewRouter(
 	healthHandler *handler.HealthHandler,
 	oauthHandler *handler.OAuthHandler,
 	webhookHandler *handler.WebhookHandler,
+	logHandler *handler.LogHandler,
 ) *Router {
 	app := fiber.New(fiber.Config{
 		AppName:      cfg.App.Name,
@@ -39,6 +41,7 @@ func NewRouter(
 		healthHandler:  healthHandler,
 		oauthHandler:   oauthHandler,
 		webhookHandler: webhookHandler,
+		logHandler:     logHandler,
 	}
 }
 
@@ -60,6 +63,9 @@ func (r *Router) Setup() *fiber.App {
 
 	// Health check route
 	r.app.Get("/health", r.healthHandler.Health)
+
+	// Log viewer route (HTML page)
+	r.app.Get("/logs", r.logHandler.LogViewer)
 
 	// OAuth callback route (must be at root level for redirect)
 	r.app.Get("/redirect/oauth", r.oauthHandler.OAuthCallback)
@@ -87,6 +93,13 @@ func (r *Router) Setup() *fiber.App {
 			esign.Get("/profile", r.esignHandler.GetProfile)
 			esign.Get("/documents", r.esignHandler.GetDocuments)
 			esign.Post("/documents/request-sign", r.esignHandler.GlobalRequestSign)
+		}
+
+		// Log routes
+		logs := api.Group("/logs")
+		{
+			logs.Get("", r.logHandler.GetLogs)
+			logs.Get("/search", r.logHandler.SearchLogs)
 		}
 	}
 

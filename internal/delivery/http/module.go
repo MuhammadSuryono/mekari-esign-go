@@ -13,6 +13,7 @@ var Module = fx.Module("http",
 		handler.NewHealthHandler,
 		handler.NewOAuthHandler,
 		handler.NewWebhookHandler,
+		handler.NewLogHandler,
 		router.NewRouter,
 	),
 )

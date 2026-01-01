@@ -173,7 +173,7 @@ func (r *esignRepository) GlobalRequestSign(ctx context.Context, email string, r
 		EntryNo:          req.EntryNo,
 	}
 
-	reqCtx := &httpclient.RequestContext{Email: email}
+	reqCtx := &httpclient.RequestContext{Email: email, InvoiceNo: req.InvoiceNumber, EntryNo: req.EntryNo}
 	// Send JSON POST request to Mekari API
 	err = r.client.Post(ctx, reqCtx, "/documents/request_global_sign", mekariReq, &response)
 	if err != nil {

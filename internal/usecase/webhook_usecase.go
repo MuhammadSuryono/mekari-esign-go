@@ -540,8 +540,8 @@ func (u *webhookUsecase) sendNAVLogEntry(ctx context.Context, payload *entity.We
 
 	// Build NAV log entry with OData field names
 	navEntry := &entity.NAVLogEntry{
-		EntryNo:         mapping.EntryNo,
-		InvoiceNo:       mapping.InvoiceNumber,
+		EntryNo: mapping.EntryNo,
+		//InvoiceNo:       mapping.InvoiceNumber,
 		Filename:        payload.Data.Attributes.Filename,
 		FilePathIn:      locationIn,
 		FilePathProcess: locationProcess,

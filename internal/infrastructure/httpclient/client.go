@@ -29,7 +29,9 @@ var ErrUnauthorized = errors.New("unauthorized: token refresh failed, re-authori
 
 // RequestContext contains context for authenticated requests
 type RequestContext struct {
-	Email string // Email for token lookup (only used for OAuth2)
+	Email     string // Email for token lookup (only used for OAuth2)
+	InvoiceNo string
+	EntryNo   int
 }
 
 type HTTPClient interface {
@@ -121,6 +123,31 @@ func truncateBase64InJSON(jsonStr string, maxLength int) string {
 	})
 }
 
+// extractInvoiceNo attempts to extract invoice_no from request body JSON
+func extractInvoiceNo(requestBody []byte) string {
+	if len(requestBody) == 0 {
+		return ""
+	}
+
+	// Try to extract invoice_no, doc_id, or filename from the request body
+	var data map[string]interface{}
+	if err := json.Unmarshal(requestBody, &data); err != nil {
+		return ""
+	}
+
+	// Check common invoice-related fields
+	invoiceFields := []string{"invoice_no", "invoiceNo", "invoice_number", "doc_id", "document_id", "filename", "file_name"}
+	for _, field := range invoiceFields {
+		if val, ok := data[field]; ok {
+			if str, ok := val.(string); ok && str != "" {
+				return str
+			}
+		}
+	}
+
+	return ""
+}
+
 // formatHeadersForLog formats HTTP headers for logging in "Header Key=Value" format
 func formatHeadersForLog(headers http.Header) string {
 	var sb strings.Builder
@@ -176,6 +203,9 @@ func (c *httpClient) saveAPILog(ctx context.Context, method, endpoint string, re
 		return
 	}
 
+	// Try to extract invoice_no from request body
+	//invoiceNo := extractInvoiceNo(requestBody)
+
 	// Truncate base64 in request body
 	reqBodyStr := ""
 	if len(requestBody) > 0 {
@@ -193,6 +223,7 @@ func (c *httpClient) saveAPILog(ctx context.Context, method, endpoint string, re
 	}
 
 	apiLog := &entity.APILog{
+		//InvoiceNo:    invoiceNo,
 		Endpoint:     endpoint,
 		Method:       method,
 		RequestBody:  reqBodyStr,
@@ -214,33 +245,33 @@ func (c *httpClient) saveAPILog(ctx context.Context, method, endpoint string, re
 	}()
 
 	// Also send to NAV if enabled
-	if c.navAPILogSender != nil {
-		go func() {
-			// Determine status description
-			statusDesc := "SUCCESS"
-			if statusCode < 200 || statusCode >= 300 {
-				statusDesc = "ERROR"
-			}
-
-			// Build body summary (combine request and response info)
-			bodySummary := fmt.Sprintf(`{"method":"%s","status_code":%d,"duration_ms":%d, "requester": %s}`,
-				method, statusCode, duration.Milliseconds(), email)
-
-			navLog := &entity.NAVAPILog{
-				StatusDescription: statusDesc,
-				DateTime:          time.Now().UTC().Format(time.RFC3339),
-				InvoiceNo:         endpoint, // Using endpoint as an identifier
-				Body:              bodySummary,
-			}
-
-			if err := c.navAPILogSender.SendAPILog(context.Background(), navLog); err != nil {
-				c.logger.Warn("Failed to send API log to NAV",
-					zap.String("endpoint", endpoint),
-					zap.Error(err),
-				)
-			}
-		}()
-	}
+	//if c.navAPILogSender != nil {
+	//	go func() {
+	//		// Determine status description
+	//		statusDesc := "SUCCESS"
+	//		if statusCode < 200 || statusCode >= 300 {
+	//			statusDesc = "ERROR"
+	//		}
+	//
+	//		// Build body summary (combine request and response info)
+	//		bodySummary := fmt.Sprintf(`{"method":"%s","status_code":%d,"duration_ms":%d, "requester": %s}`,
+	//			method, statusCode, duration.Milliseconds(), email)
+	//
+	//		navLog := &entity.NAVAPILog{
+	//			StatusDescription: statusDesc,
+	//			DateTime:          time.Now().UTC().Format(time.RFC3339),
+	//			InvoiceNo:         endpoint, // Using endpoint as an identifier
+	//			Body:              bodySummary,
+	//		}
+	//
+	//		if err := c.navAPILogSender.SendAPILog(context.Background(), navLog); err != nil {
+	//			c.logger.Warn("Failed to send API log to NAV",
+	//				zap.String("endpoint", endpoint),
+	//				zap.Error(err),
+	//			)
+	//		}
+	//	}()
+	//}
 }
 
 // setAuthHeaders sets the appropriate authorization headers based on config
