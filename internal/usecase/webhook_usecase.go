@@ -383,15 +383,9 @@ func (u *webhookUsecase) RequestStamping(ctx context.Context, email string, sign
 		Doc:         base64Doc,
 		Filename:    mapping.Filename,
 		Annotations: annotations,
-		CallbackURL: u.config.App.BaseURL + "/webhook/mekari",
-		//CallbackURL:      "https://webhook.site/acf98cf8-c888-4720-a907-32614ae8fbca",
+		//CallbackURL: u.config.App.BaseURL + "/webhook/mekari",
+		CallbackURL:      "https://webhook.site/a5cb41ad-f84e-4ce6-b1f9-a20c6879f531",
 		DocumentDeadline: mapping.DocumentDeadline,
-	}
-
-	// Marshal request body
-	reqBody, err := json.Marshal(stampReq)
-	if err != nil {
-		return fmt.Errorf("failed to marshal stamp request: %w", err)
 	}
 
 	// Build stamp URL
@@ -412,7 +406,7 @@ func (u *webhookUsecase) RequestStamping(ctx context.Context, email string, sign
 	}
 
 	var stampResp entity.StampResponse
-	err = u.localClient.Post(ctx, reqCtx, "/documents/stamp", reqBody, &stampResp)
+	err := u.localClient.Post(ctx, reqCtx, "/documents/stamp", stampReq, &stampResp)
 	if err != nil {
 		return fmt.Errorf("failed to send stamp request: %w", err)
 	}
@@ -453,6 +447,9 @@ func (u *webhookUsecase) getNAVSetupCached(ctx context.Context, entryNo int) (*e
 		var setup entity.NAVSetup
 		if err := json.Unmarshal([]byte(cached), &setup); err == nil {
 			u.logger.Debug("Using cached NAV setup", zap.Int("entry_no", entryNo))
+			setup.FileLocationProcess = "/home/yono/mekari/document/progress"
+			setup.FileLocationOut = "/home/yono/mekari/document/ready"
+			setup.FileLocationIn = "/home/yono/mekari/document/finish"
 			return &setup, nil
 		}
 	}
@@ -465,6 +462,10 @@ func (u *webhookUsecase) getNAVSetupCached(ctx context.Context, entryNo int) (*e
 	if setup == nil {
 		return nil, nil
 	}
+
+	setup.FileLocationProcess = "/home/yono/mekari/document/progress"
+	setup.FileLocationOut = "/home/yono/mekari/document/ready"
+	setup.FileLocationIn = "/home/yono/mekari/document/finish"
 
 	// Cache the setup (no expiration - permanent for this entry_no)
 	setupJSON, _ := json.Marshal(setup)
