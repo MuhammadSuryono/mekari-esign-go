@@ -372,6 +372,13 @@ func (u *webhookUsecase) replaceDocumentInProgress(invoiceNumber string, content
 func (u *webhookUsecase) RequestStamping(ctx context.Context, email string, signedPDFContent []byte, mapping DocumentMapping) error {
 	// Encode PDF to base64
 	base64Doc := base64.StdEncoding.EncodeToString(signedPDFContent)
+	defaultWidth := float64(80)
+	defaultHeight := float64(80)
+
+	if mapping.StampPositions.Width == 0 {
+		mapping.StampPositions.Width = defaultWidth
+		mapping.StampPositions.Height = defaultHeight
+	}
 
 	// Build stamp annotation from saved stamp positions
 	annotations := []entity.StampAnnotation{}
@@ -380,8 +387,8 @@ func (u *webhookUsecase) RequestStamping(ctx context.Context, email string, sign
 			Page:          mapping.StampPositions.Page,
 			PositionX:     mapping.StampPositions.X,
 			PositionY:     mapping.StampPositions.Y,
-			ElementWidth:  80, // Default e-meterai size
-			ElementHeight: 80,
+			ElementWidth:  mapping.StampPositions.Width, // Default e-meterai size
+			ElementHeight: mapping.StampPositions.Height,
 			CanvasWidth:   595, // A4 width
 			CanvasHeight:  841, // A4 height
 			TypeOf:        "meterai",

@@ -125,14 +125,19 @@ func (r *esignRepository) GlobalRequestSign(ctx context.Context, email string, r
 				page = signer.SignPage
 			}
 
+			if signer.SignaturePositions.Width == 0 {
+				signer.SignaturePositions.Width = elementWidth
+				signer.SignaturePositions.Height = elementHeight
+			}
+
 			annotation := entity.SignerAnnotation{
 				TypeOf:        "signature",
 				SignatureType: entity.DefaultSignatureTypes,
 				Page:          page,
 				PositionX:     signer.SignaturePositions.X,
 				PositionY:     signer.SignaturePositions.Y,
-				ElementWidth:  elementWidth,
-				ElementHeight: elementHeight,
+				ElementWidth:  signer.SignaturePositions.Width,
+				ElementHeight: signer.SignaturePositions.Height,
 				CanvasWidth:   entity.DefaultCanvasWidth,
 				CanvasHeight:  entity.DefaultCanvasHeight,
 				AutoFields:    entity.DefaultAutoFields,

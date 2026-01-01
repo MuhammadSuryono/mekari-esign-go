@@ -23,11 +23,13 @@ type SignerRequest struct {
 	RequiresOTP        bool               `json:"requires_otp,omitempty"` // Require OTP verification
 }
 
-// SignaturePosition represents the position of signature on document (client request)
+// SignaturePosition represents the position of signature on a document (client request)
 type SignaturePosition struct {
-	X    float64 `json:"x"`              // X coordinate
-	Y    float64 `json:"y"`              // Y coordinate
-	Page int     `json:"page,omitempty"` // Page number (1-based)
+	X      float64 `json:"x"` // X coordinate
+	Y      float64 `json:"y"` // Y coordinate
+	Width  float64 `json:"width,omitempty"`
+	Height float64 `json:"height,omitempty"`
+	Page   int     `json:"page,omitempty"` // Page number (1-based)
 }
 
 // DocumentDeadline represents optional deadline settings
@@ -40,9 +42,11 @@ type DocumentDeadline struct {
 // StampPosition represents the position of e-meterai stamp on document
 // This is stored temporarily and used later during stamping
 type StampPosition struct {
-	X    float64 `json:"x"`              // X coordinate
-	Y    float64 `json:"y"`              // Y coordinate
-	Page int     `json:"page,omitempty"` // Page number (1-based)
+	X      float64 `json:"x"` // X coordinate
+	Y      float64 `json:"y"` // Y coordinate
+	Width  float64 `json:"width,omitempty"`
+	Height float64 `json:"height,omitempty"`
+	Page   int     `json:"page,omitempty"` // Page number (1-based)
 }
 
 // ========== Mekari API Request Structures ==========
