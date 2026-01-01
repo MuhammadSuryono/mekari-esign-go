@@ -52,10 +52,6 @@ func (r *esignRepository) getNAVSetup(ctx context.Context, entryNo int) *entity.
 		return nil
 	}
 
-	setup.FileLocationProcess = "/home/yono/mekari/document/progress"
-	setup.FileLocationOut = "/home/yono/mekari/document/ready"
-	setup.FileLocationIn = "/home/yono/mekari/document/finish"
-
 	return &setup
 }
 
@@ -164,8 +160,8 @@ func (r *esignRepository) GlobalRequestSign(ctx context.Context, email string, r
 	}
 
 	// Build callback URL
-	//callbackURL := r.config.App.BaseURL + "/webhook/mekari"
-	callbackURL := "https://webhook.site/a5cb41ad-f84e-4ce6-b1f9-a20c6879f531"
+	callbackURL := r.config.App.BaseURL + "/webhook/mekari"
+	//callbackURL := "https://webhook.site/a5cb41ad-f84e-4ce6-b1f9-a20c6879f531"
 
 	// Build Mekari API request with document from local folder
 	// Note: StampPositions are NOT sent here - they are saved and used later for stamping
