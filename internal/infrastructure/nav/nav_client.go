@@ -111,6 +111,55 @@ func (c *Client) UpdateLogEntry(ctx context.Context, entry *entity.NAVLogEntry) 
 	return nil
 }
 
+// SendAPILog sends an API log entry to NAV (MekariApiLogEntries)
+func (c *Client) SendAPILog(ctx context.Context, log *entity.NAVAPILog) error {
+	if !c.config.NAV.Enabled {
+		return nil
+	}
+
+	// Build URL
+	apiURL := fmt.Sprintf("%s/ODataV4/Company('%s')/MekariApiLogEntries",
+		c.config.NAV.BaseURL,
+		url.PathEscape(c.config.NAV.Company),
+	)
+
+	// Marshal request body
+	reqBody, err := json.Marshal(log)
+	if err != nil {
+		return fmt.Errorf("failed to marshal NAV API log: %w", err)
+	}
+
+	// Create POST request
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, apiURL, bytes.NewBuffer(reqBody))
+	if err != nil {
+		return fmt.Errorf("failed to create NAV API log request: %w", err)
+	}
+
+	// Set headers
+	req.Header.Set("Content-Type", "application/json")
+	auth := base64.StdEncoding.EncodeToString([]byte(c.config.NAV.Username + ":" + c.config.NAV.Password))
+	req.Header.Set("Authorization", "Basic "+auth)
+
+	// Execute request
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("failed to send NAV API log: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		respBody, _ := io.ReadAll(resp.Body)
+		return fmt.Errorf("NAV API log failed: status=%d, body=%s", resp.StatusCode, string(respBody))
+	}
+
+	c.logger.Debug("Successfully sent API log to NAV",
+		zap.String("invoice_no", log.InvoiceNo),
+		zap.String("status", log.StatusDescription),
+	)
+
+	return nil
+}
+
 // GetSetup fetches the Mekari setup configuration from NAV
 func (c *Client) GetSetup(ctx context.Context) (*entity.NAVSetup, error) {
 	if !c.config.NAV.Enabled {

@@ -56,26 +56,33 @@ type APILogSaver interface {
 	Save(ctx context.Context, log *entity.APILog) error
 }
 
-type httpClient struct {
-	client        *http.Client
-	config        *config.Config
-	baseURL       string
-	tokenService  oauth2.TokenService
-	hmacSignature *HMACSignature
-	apiLogSaver   APILogSaver
-	logger        *zap.Logger
+// NAVAPILogSender interface for sending API logs to NAV
+type NAVAPILogSender interface {
+	SendAPILog(ctx context.Context, log *entity.NAVAPILog) error
 }
 
-func NewHTTPClient(cfg *config.Config, tokenService oauth2.TokenService, apiLogSaver APILogSaver, logger *zap.Logger) HTTPClient {
+type httpClient struct {
+	client          *http.Client
+	config          *config.Config
+	baseURL         string
+	tokenService    oauth2.TokenService
+	hmacSignature   *HMACSignature
+	apiLogSaver     APILogSaver
+	navAPILogSender NAVAPILogSender
+	logger          *zap.Logger
+}
+
+func NewHTTPClient(cfg *config.Config, tokenService oauth2.TokenService, apiLogSaver APILogSaver, navAPILogSender NAVAPILogSender, logger *zap.Logger) HTTPClient {
 	c := &httpClient{
 		client: &http.Client{
 			Timeout: cfg.Mekari.Timeout,
 		},
-		config:       cfg,
-		baseURL:      cfg.Mekari.BaseURL,
-		tokenService: tokenService,
-		apiLogSaver:  apiLogSaver,
-		logger:       logger,
+		config:          cfg,
+		baseURL:         cfg.Mekari.BaseURL,
+		tokenService:    tokenService,
+		apiLogSaver:     apiLogSaver,
+		navAPILogSender: navAPILogSender,
+		logger:          logger,
 	}
 
 	// Initialize HMAC signature if using HMAC auth
@@ -205,6 +212,35 @@ func (c *httpClient) saveAPILog(ctx context.Context, method, endpoint string, re
 			)
 		}
 	}()
+
+	// Also send to NAV if enabled
+	if c.navAPILogSender != nil {
+		go func() {
+			// Determine status description
+			statusDesc := "SUCCESS"
+			if statusCode < 200 || statusCode >= 300 {
+				statusDesc = "ERROR"
+			}
+
+			// Build body summary (combine request and response info)
+			bodySummary := fmt.Sprintf(`{"method":"%s","status_code":%d,"duration_ms":%d, "requester": %s}`,
+				method, statusCode, duration.Milliseconds(), email)
+
+			navLog := &entity.NAVAPILog{
+				StatusDescription: statusDesc,
+				DateTime:          time.Now().UTC().Format(time.RFC3339),
+				InvoiceNo:         endpoint, // Using endpoint as an identifier
+				Body:              bodySummary,
+			}
+
+			if err := c.navAPILogSender.SendAPILog(context.Background(), navLog); err != nil {
+				c.logger.Warn("Failed to send API log to NAV",
+					zap.String("endpoint", endpoint),
+					zap.Error(err),
+				)
+			}
+		}()
+	}
 }
 
 // setAuthHeaders sets the appropriate authorization headers based on config
