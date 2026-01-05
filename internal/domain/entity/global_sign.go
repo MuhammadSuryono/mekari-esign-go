@@ -25,13 +25,14 @@ type SignerRequest struct {
 
 // SignaturePosition represents the position of signature on a document (client request)
 type SignaturePosition struct {
-	X            float64 `json:"x"` // X coordinate
-	Y            float64 `json:"y"` // Y coordinate
-	Width        float64 `json:"width,omitempty"`
-	Height       float64 `json:"height,omitempty"`
-	CanvasWidth  float64 `json:"canvas_width,omitempty"`
-	CanvasHeight float64 `json:"canvas_height,omitempty"`
-	Page         int     `json:"page,omitempty"` // Page number (1-based)
+	X            float64  `json:"x"` // X coordinate
+	Y            float64  `json:"y"` // Y coordinate
+	Width        float64  `json:"width,omitempty"`
+	Height       float64  `json:"height,omitempty"`
+	CanvasWidth  float64  `json:"canvas_width,omitempty"`
+	CanvasHeight float64  `json:"canvas_height,omitempty"`
+	Page         int      `json:"page,omitempty"` // Page number (1-based)
+	AutoFields   []string `json:"auto_fields,omitempty"`
 }
 
 // DocumentDeadline represents optional deadline settings

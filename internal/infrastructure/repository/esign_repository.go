@@ -145,7 +145,7 @@ func (r *esignRepository) GlobalRequestSign(ctx context.Context, email string, r
 				ElementHeight: signer.SignaturePositions.Height,
 				CanvasWidth:   signer.SignaturePositions.CanvasWidth,
 				CanvasHeight:  signer.SignaturePositions.CanvasHeight,
-				AutoFields:    entity.DefaultAutoFields,
+				AutoFields:    signer.SignaturePositions.AutoFields,
 			}
 			annotations = append(annotations, annotation)
 		}
@@ -173,7 +173,7 @@ func (r *esignRepository) GlobalRequestSign(ctx context.Context, email string, r
 	callbackURL := r.config.App.BaseURL + "/webhook/mekari"
 	//callbackURL := "https://webhook.site/a5cb41ad-f84e-4ce6-b1f9-a20c6879f531"
 
-	// Build Mekari API request with document from local folder
+	// Build Mekari API request with a document from local folder
 	// Note: StampPositions are NOT sent here - they are saved and used later for stamping
 	mekariReq := &entity.MekariSignRequest{
 		Doc:              base64Doc,
