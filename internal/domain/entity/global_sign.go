@@ -33,6 +33,7 @@ type SignaturePosition struct {
 	CanvasHeight float64  `json:"canvas_height,omitempty"`
 	Page         int      `json:"page,omitempty"` // Page number (1-based)
 	AutoFields   []string `json:"auto_fields,omitempty"`
+	TypeOf       string   `json:"type_of,omitempty"`
 }
 
 // DocumentDeadline represents optional deadline settings

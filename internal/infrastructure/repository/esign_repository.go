@@ -116,10 +116,10 @@ func (r *esignRepository) GlobalRequestSign(ctx context.Context, email string, r
 	)
 
 	for i, signer := range req.Signers {
-		// Build annotation from signature position
+		// Build annotation from the signature position
 		annotations := []entity.SignerAnnotation{}
 		if signer.SignaturePositions != nil {
-			// Determine page - use signature position page or sign_page
+			// Determine page - use the signature position page or sign_page
 			page := signer.SignaturePositions.Page
 			if page == 0 {
 				page = signer.SignPage
@@ -135,8 +135,13 @@ func (r *esignRepository) GlobalRequestSign(ctx context.Context, email string, r
 				signer.SignaturePositions.CanvasHeight = entity.DefaultCanvasHeight
 			}
 
+			typeOf := "signature"
+			if signer.SignaturePositions.TypeOf != "" {
+				typeOf = signer.SignaturePositions.TypeOf
+			}
+
 			annotation := entity.SignerAnnotation{
-				TypeOf:        "signature",
+				TypeOf:        typeOf,
 				SignatureType: entity.DefaultSignatureTypes,
 				Page:          page,
 				PositionX:     signer.SignaturePositions.X,
