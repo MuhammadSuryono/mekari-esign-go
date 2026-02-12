@@ -224,6 +224,8 @@ func (c *httpClient) saveAPILog(ctx context.Context, method, endpoint string, re
 		RequestBody:  reqBodyStr,
 		ResponseBody: respBodyStr,
 		StatusCode:   statusCode,
+		From:         "SYSTEM",
+		To:           "MEKARI",
 		Duration:     duration.Milliseconds(),
 		Email:        reqCtx.Email,
 		CreatedAt:    time.Now(),

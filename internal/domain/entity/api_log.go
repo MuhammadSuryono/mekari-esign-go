@@ -9,6 +9,8 @@ type APILog struct {
 	InvoiceNo    string    `json:"invoice_no"`
 	EntryNo      int       `json:"entry_no"`
 	Method       string    `json:"method"`
+	From         string    `json:"from"`
+	To           string    `json:"to"`
 	RequestBody  string    `json:"request_body"`
 	ResponseBody string    `json:"response_body"`
 	StatusCode   int       `json:"status_code"`

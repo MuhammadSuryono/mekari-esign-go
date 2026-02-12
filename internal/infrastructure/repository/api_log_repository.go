@@ -33,8 +33,8 @@ func NewAPILogRepository(db *database.Database, logger *zap.Logger) APILogReposi
 // Save saves an API log entry to the database
 func (r *apiLogRepository) Save(ctx context.Context, log *entity.APILog) error {
 	query := `
-		INSERT INTO api_logs (endpoint, invoice_no, entry_no, method, request_body, response_body, status_code, duration_ms, email, created_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+		INSERT INTO api_logs (endpoint, invoice_no, entry_no, method, request_body, response_body, status_code, duration_ms, email, created_at, "from", "to")
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 	`
 
 	_, err := r.db.DB.ExecContext(ctx, query,
@@ -48,6 +48,8 @@ func (r *apiLogRepository) Save(ctx context.Context, log *entity.APILog) error {
 		log.Duration,
 		log.Email,
 		log.CreatedAt,
+		log.From,
+		log.To,
 	)
 
 	if err != nil {

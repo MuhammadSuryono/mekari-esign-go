@@ -19,6 +19,7 @@ import (
 	"mekari-esign/internal/infrastructure/nav"
 	"mekari-esign/internal/infrastructure/oauth2"
 	"mekari-esign/internal/infrastructure/redis"
+	"mekari-esign/internal/infrastructure/repository"
 )
 
 const (
@@ -45,6 +46,7 @@ type webhookUsecase struct {
 	logger        *zap.Logger
 	httpClient    *http.Client
 	localClient   httpclient.HTTPClient
+	apiLogRepo    repository.APILogRepository
 }
 
 func NewWebhookUsecase(
@@ -55,6 +57,7 @@ func NewWebhookUsecase(
 	navClient *nav.Client,
 	logger *zap.Logger,
 	client httpclient.HTTPClient,
+	apiLogRepo repository.APILogRepository,
 ) WebhookUsecase {
 	uc := &webhookUsecase{
 		config:       cfg,
@@ -67,6 +70,7 @@ func NewWebhookUsecase(
 			Timeout: cfg.Mekari.Timeout,
 		},
 		localClient: client,
+		apiLogRepo:  apiLogRepo,
 	}
 
 	// Initialize HMAC signature if using HMAC auth
@@ -80,7 +84,42 @@ func NewWebhookUsecase(
 	return uc
 }
 
-func (u *webhookUsecase) ProcessWebhook(ctx context.Context, payload *entity.WebhookPayload) error {
+func (u *webhookUsecase) ProcessWebhook(ctx context.Context, payload *entity.WebhookPayload) (err error) {
+	start := time.Now()
+	reqBody, _ := json.Marshal(payload)
+	var mapping DocumentMapping
+	var email string
+	var invoiceNumber string
+	defer func() {
+		if u.apiLogRepo == nil {
+			return
+		}
+		statusCode := 200
+		respBody := ""
+		if err != nil {
+			statusCode = 500
+			respBody = fmt.Sprintf(`{"error":"%s"}`, err.Error())
+		} else {
+			respBody = fmt.Sprintf(`{"message":"Webhook processed","document_id":"%s","signing_status":"%s","stamping_status":"%s"}`, payload.Data.ID, payload.Data.Attributes.SigningStatus, payload.Data.Attributes.StampingStatus)
+		}
+		apiLog := &entity.APILog{
+			InvoiceNo:    invoiceNumber,
+			EntryNo:      mapping.EntryNo,
+			Endpoint:     u.config.App.BaseURL + "/webhook/mekari",
+			Method:       http.MethodPost,
+			RequestBody:  string(reqBody),
+			ResponseBody: respBody,
+			StatusCode:   statusCode,
+			Duration:     time.Since(start).Milliseconds(),
+			Email:        email,
+			CreatedAt:    time.Now(),
+			From:         "MEKARI",
+			To:           "SYSTEM",
+		}
+		go func() {
+			_ = u.apiLogRepo.Save(context.Background(), apiLog)
+		}()
+	}()
 	documentID := payload.Data.ID
 
 	u.logger.Info("Processing webhook callback",
@@ -102,14 +141,13 @@ func (u *webhookUsecase) ProcessWebhook(ctx context.Context, payload *entity.Web
 	}
 
 	// Parse document mapping
-	var mapping DocumentMapping
 	if err := json.Unmarshal([]byte(mappingData), &mapping); err != nil {
 		// Fallback: old format might be just email string
 		mapping = DocumentMapping{Email: mappingData}
 	}
 
-	email := mapping.Email
-	invoiceNumber := mapping.InvoiceNumber
+	email = mapping.Email
+	invoiceNumber = mapping.InvoiceNumber
 
 	// If invoice number is empty, try to extract from filename
 	if invoiceNumber == "" {
