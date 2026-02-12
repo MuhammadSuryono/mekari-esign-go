@@ -142,7 +142,7 @@ func (h *LogHandler) LogViewer(c *fiber.Ctx) error {
                 document.getElementById('tableContainer').innerHTML = '<p class="loading">No logs found</p>';
                 return;
             }
-            let html = '<div class="table-container"><table><thead><tr><th>ID</th><th>Invoice Number</th><th>Time</th><th>Method</th><th>Endpoint</th><th>Status</th><th>Duration</th><th>Email</th><th>Request</th><th>Response</th></tr></thead><tbody>';
+            let html = '<div class="table-container"><table><thead><tr><th>ID</th><th>Invoice Number</th><th>Time</th><th>Method</th><th>Endpoint</th><th>From</th><th>To</th><th>Status</th><th>Duration</th><th>Email</th><th>Request</th><th>Response</th></tr></thead><tbody>';
             logs.forEach((log, idx) => {
                 const statusClass = log.status_code >= 200 && log.status_code < 300 ? 'status-success' : 'status-error';
                 const time = new Date(log.created_at).toLocaleString();
@@ -152,6 +152,8 @@ func (h *LogHandler) LogViewer(c *fiber.Ctx) error {
                     '<td>' + time + '</td>' +
                     '<td><strong>' + log.method + '</strong></td>' +
                     '<td class="endpoint" title="' + escapeHtml(log.endpoint) + '">' + escapeHtml(log.endpoint) + '</td>' +
+                    '<td>' + (log.from || '-') + '</td>' +
+                    '<td>' + (log.to || '-') + '</td>' +
                     '<td class="' + statusClass + '">' + log.status_code + '</td>' +
                     '<td>' + log.duration_ms + 'ms</td>' +
                     '<td>' + (log.email || '-') + '</td>' +
