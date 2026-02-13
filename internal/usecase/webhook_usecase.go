@@ -114,7 +114,7 @@ func (u *webhookUsecase) ProcessWebhook(ctx context.Context, payload *entity.Web
 			Email:        email,
 			CreatedAt:    time.Now(),
 			From:         "MEKARI",
-			To:           "SYSTEM",
+			To:           "NAV",
 		}
 		go func() {
 			_ = u.apiLogRepo.Save(context.Background(), apiLog)

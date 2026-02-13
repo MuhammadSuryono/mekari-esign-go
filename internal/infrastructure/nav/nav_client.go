@@ -265,7 +265,7 @@ func (c *Client) saveAPILog(ctx context.Context, method, endpoint string, reques
 		StatusCode:   statusCode,
 		Duration:     duration.Milliseconds(),
 		CreatedAt:    time.Now(),
-		From:         "SYSTEM",
+		From:         "",
 		To:           "NAV",
 	}
 
