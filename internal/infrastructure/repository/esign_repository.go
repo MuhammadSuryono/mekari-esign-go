@@ -67,6 +67,19 @@ func (r *esignRepository) GetProfile(ctx context.Context, email string) (*entity
 	return response.Data, nil
 }
 
+func (r *esignRepository) GetDocumentDetail(ctx context.Context, documentId string) (*entity.DocumentResponse, error) {
+	var response entity.DocumentDetailResponse
+
+	reqCtx := &httpclient.RequestContext{Email: ""}
+	err := r.client.Get(ctx, reqCtx, "/documents/"+documentId, &response)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get profile: %w", err)
+	}
+
+	return response.Data, nil
+
+}
+
 func (r *esignRepository) GetDocuments(ctx context.Context, email string, page, perPage int) (*entity.DocumentListResponse, error) {
 	var response entity.DocumentListResponse
 

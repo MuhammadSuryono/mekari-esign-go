@@ -40,6 +40,7 @@ type DocumentMapping struct {
 type EsignUsecase interface {
 	GetProfile(ctx context.Context, email string) (*entity.Profile, error)
 	GetDocuments(ctx context.Context, email string, page, perPage int) (*entity.DocumentListResponse, error)
+	GetDocumentDetail(ctx context.Context, id string) (*entity.DocumentResponse, error)
 	GlobalRequestSign(ctx context.Context, req *entity.GlobalSignRequest) (*entity.GlobalSignResult, error)
 	// GetDocumentMapping retrieves email and invoice number by document ID from Redis
 	GetDocumentMapping(ctx context.Context, documentID string) (*DocumentMapping, error)
@@ -82,6 +83,23 @@ func (u *esignUsecase) GetProfile(ctx context.Context, email string) (*entity.Pr
 	)
 
 	return profile, nil
+}
+
+func (u *esignUsecase) GetDocumentDetail(ctx context.Context, id string) (*entity.DocumentResponse, error) {
+	u.logger.Info("Getting document detail", zap.String("documentID", id))
+
+	documentDetail, err := u.repo.GetDocumentDetail(ctx, id)
+	if err != nil {
+		u.logger.Error("Failed to get document detail", zap.Error(err))
+		return nil, err
+	}
+
+	u.logger.Info("Successfully retrieved profile",
+		zap.String("documentID", id),
+	)
+
+	return documentDetail, nil
+
 }
 
 func (u *esignUsecase) GetDocuments(ctx context.Context, email string, page, perPage int) (*entity.DocumentListResponse, error) {

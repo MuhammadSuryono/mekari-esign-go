@@ -99,10 +99,18 @@ type NAVLogEntry struct {
 
 // MapSigningStatus maps Mekari signing status to NAV status
 func MapSigningStatus(status string) string {
-	if status == "completed" {
+	switch status {
+	case "completed":
 		return "Completed"
+	case "voided":
+		return "Voided"
+	case "declined":
+		return "Declined"
+	case "failed":
+		return "Failed"
+	default:
+		return "Pending"
 	}
-	return "Pending"
 }
 
 // MapStampingStatus maps Mekari stamping status to NAV status
@@ -112,6 +120,8 @@ func MapStampingStatus(status string) string {
 		return "Completed"
 	case "none":
 		return ""
+	case "failed":
+		return "Failed"
 	default:
 		return "Pending"
 	}

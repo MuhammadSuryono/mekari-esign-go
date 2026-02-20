@@ -54,6 +54,38 @@ func (h *EsignHandler) GetProfile(c *fiber.Ctx) error {
 	return c.JSON(entity.NewSuccessResponse(profile, "Profile retrieved successfully"))
 }
 
+// GetDocumentDetail godoc
+// @Summary Get document detail
+// @Description Get the document detail from Mekari eSign
+// @Tags esign
+// @Accept json
+// @Produce json
+// @Param documentId query string true "Document ID"
+// @Success 200 {object} entity.APIResponse
+// @Failure 400 {object} entity.APIResponse
+// @Failure 500 {object} entity.APIResponse
+// @Router /api/v1/esign/document/detail [get]
+func (h *EsignHandler) GetDocumentDetail(c *fiber.Ctx) error {
+	ctx := c.UserContext()
+
+	documentId := c.Query("documentId")
+	if documentId == "" {
+		return c.Status(fiber.StatusBadRequest).JSON(
+			entity.NewErrorResponse("BAD_REQUEST", "Document ID is required"),
+		)
+	}
+
+	document, err := h.usecase.GetDocumentDetail(ctx, documentId)
+	if err != nil {
+		h.logger.Error("Failed to get document", zap.Error(err))
+		return c.Status(fiber.StatusInternalServerError).JSON(
+			entity.NewErrorResponse("INTERNAL_ERROR", err.Error()),
+		)
+	}
+
+	return c.JSON(entity.NewSuccessResponse(document, "Document detail retrieved successfully"))
+}
+
 // GetDocuments godoc
 // @Summary Get documents
 // @Description Get list of documents from Mekari eSign

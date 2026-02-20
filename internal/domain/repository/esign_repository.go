@@ -9,6 +9,7 @@ import (
 type EsignRepository interface {
 	GetProfile(ctx context.Context, email string) (*entity.Profile, error)
 	GetDocuments(ctx context.Context, email string, page, perPage int) (*entity.DocumentListResponse, error)
+	GetDocumentDetail(ctx context.Context, documentId string) (*entity.DocumentResponse, error)
 	// GlobalRequestSign sends sign request to Mekari API
 	// The doc (base64 PDF) will be fetched from invoice service based on invoice_number
 	GlobalRequestSign(ctx context.Context, email string, req *entity.GlobalSignRequest) (*entity.GlobalSignResponse, error)

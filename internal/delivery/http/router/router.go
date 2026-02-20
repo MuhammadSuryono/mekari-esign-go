@@ -92,6 +92,7 @@ func (r *Router) Setup() *fiber.App {
 		{
 			esign.Get("/profile", r.esignHandler.GetProfile)
 			esign.Get("/documents", r.esignHandler.GetDocuments)
+			esign.Get("/document/detail", r.esignHandler.GetDocumentDetail)
 			esign.Post("/documents/request-sign", r.esignHandler.GlobalRequestSign)
 		}
 
