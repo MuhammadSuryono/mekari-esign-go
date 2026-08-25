@@ -84,18 +84,19 @@ type PhoneNumber struct {
 	Number      string `json:"number,omitempty"`       // e.g., "+62895355698652"
 }
 
-// SignerAnnotation represents annotation for signature placement
+// SignerAnnotation represents annotation for signature or e-meterai placement
 type SignerAnnotation struct {
-	TypeOf        string   `json:"type_of,omitempty"`        // signature, meterai, initial, stamp (default: signature)
-	SignatureType []string `json:"signature_type,omitempty"` // font, draw, image, qr_code
-	Page          int      `json:"page"`                     // Page number
-	PositionX     float64  `json:"position_x"`               // X coordinate
-	PositionY     float64  `json:"position_y"`               // Y coordinate
-	ElementWidth  float64  `json:"element_width"`            // Element width (default: 120)
-	ElementHeight float64  `json:"element_height"`           // Element height (default: 100)
-	CanvasWidth   float64  `json:"canvas_width"`             // Canvas width (default: 595 for A4)
-	CanvasHeight  float64  `json:"canvas_height"`            // Canvas height (default: 841 for A4)
-	AutoFields    []string `json:"auto_fields,omitempty"`    // date_signed, name, email, company
+	TypeOf          string   `json:"type_of,omitempty"`          // signature, meterai, initial, stamp (default: signature)
+	SignatureType   []string `json:"signature_type,omitempty"`   // font, draw, image, qr_code
+	Page            int      `json:"page"`                       // Page number
+	PositionX       float64  `json:"position_x"`                 // X coordinate
+	PositionY       float64  `json:"position_y"`                 // Y coordinate
+	ElementWidth    float64  `json:"element_width"`              // Element width (default: 120)
+	ElementHeight   float64  `json:"element_height"`             // Element height (default: 100)
+	CanvasWidth     float64  `json:"canvas_width"`               // Canvas width (default: 595 for A4)
+	CanvasHeight    float64  `json:"canvas_height"`              // Canvas height (default: 841 for A4)
+	AutoFields      []string `json:"auto_fields,omitempty"`      // date_signed, name, email, company
+	MeteraiProvided bool     `json:"meterai_provided,omitempty"` // true: e-meterai from doc maker quota
 }
 
 // QRCodeAuditTrail represents QR code audit trail position
@@ -164,6 +165,8 @@ const (
 	DefaultElementHeight = 140.0 // Signature height (increased from 100 for better visibility)
 	DefaultCanvasWidth   = 595.0 // A4 width in points
 	DefaultCanvasHeight  = 841.0 // A4 height in points
+	DefaultStampWidth    = 80.0  // Default e-meterai width
+	DefaultStampHeight   = 80.0  // Default e-meterai height
 )
 
 // Default signature types

@@ -214,6 +214,7 @@ func (u *webhookUsecase) ProcessWebhook(ctx context.Context, payload *entity.Web
 		u.logger.Info("Signing completed",
 			zap.String("document_id", documentID),
 			zap.String("stamping_status", payload.Data.Attributes.StampingStatus),
+			zap.Bool("stamp_inline", mapping.StampInline),
 		)
 
 		// Download a signed document
@@ -226,8 +227,14 @@ func (u *webhookUsecase) ProcessWebhook(ctx context.Context, payload *entity.Web
 			return fmt.Errorf("failed to download signed document: %w", err)
 		}
 
-		// If stamping_status is "none" and we have stamp positions, request stamping
-		if payload.Data.Attributes.StampingStatus == "none" && mapping.StampPositions != nil && mapping.Stamping {
+		// Deferred stamp only: sign-then-stamp (legacy / stamp-only). Combined sign+stamp
+		// already sent e-meterai in request_global_sign — do not POST /documents/stamp again.
+		deferredStamp := !mapping.StampInline &&
+			payload.Data.Attributes.StampingStatus == "none" &&
+			mapping.StampPositions != nil &&
+			mapping.Stamping
+
+		if deferredStamp {
 			u.logger.Info("Stamping required, sending stamp request",
 				zap.String("document_id", documentID),
 			)
@@ -247,7 +254,13 @@ func (u *webhookUsecase) ProcessWebhook(ctx context.Context, payload *entity.Web
 				// Don't return error, just log it - stamping can be retried
 			}
 		} else {
-			// No stamping needed, replace the file in progress folder
+			if mapping.StampInline {
+				u.logger.Info("Skipping deferred stamp request; e-meterai already sent inline",
+					zap.String("document_id", documentID),
+					zap.String("stamping_status", payload.Data.Attributes.StampingStatus),
+				)
+			}
+
 			if err := u.replaceDocumentInProgress(invoiceNumber, signedContent, progressPath); err != nil {
 				u.logger.Error("Failed to replace document in progress",
 					zap.String("document_id", documentID),
@@ -408,14 +421,15 @@ func (u *webhookUsecase) replaceDocumentInProgress(invoiceNumber string, content
 }
 
 func (u *webhookUsecase) RequestStamping(ctx context.Context, email string, signedPDFContent []byte, mapping DocumentMapping) error {
+	if mapping.StampPositions == nil {
+		return fmt.Errorf("stamp positions is required")
+	}
+
 	// Encode PDF to base64
 	base64Doc := base64.StdEncoding.EncodeToString(signedPDFContent)
-	defaultWidth := float64(80)
-	defaultHeight := float64(80)
-
 	if mapping.StampPositions.Width == 0 {
-		mapping.StampPositions.Width = defaultWidth
-		mapping.StampPositions.Height = defaultHeight
+		mapping.StampPositions.Width = entity.DefaultStampWidth
+		mapping.StampPositions.Height = entity.DefaultStampHeight
 	}
 
 	if mapping.StampPositions.CanvasWidth == 0 {

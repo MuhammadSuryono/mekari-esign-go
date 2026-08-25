@@ -187,12 +187,20 @@ func (r *esignRepository) GlobalRequestSign(ctx context.Context, email string, r
 		}
 	}
 
+	// Combined sign + stamp: attach e-meterai to the last signer in the same request
+	if req.Stamping && req.StampPositions != nil && len(mekariSigners) > 0 {
+		last := len(mekariSigners) - 1
+		mekariSigners[last].Annotations = append(mekariSigners[last].Annotations, buildMeteraiAnnotation(req.StampPositions))
+		r.logger.Info("E-meterai annotation attached to last signer",
+			zap.String("signer_email", mekariSigners[last].Email),
+			zap.Int("signer_index", last),
+			zap.Int("page", req.StampPositions.Page),
+		)
+	}
+
 	// Build callback URL
 	callbackURL := r.config.App.BaseURL + "/webhook/mekari"
-	//callbackURL := "https://webhook.site/a5cb41ad-f84e-4ce6-b1f9-a20c6879f531"
 
-	// Build Mekari API request with a document from local folder
-	// Note: StampPositions are NOT sent here - they are saved and used later for stamping
 	mekariReq := &entity.MekariSignRequest{
 		Doc:              base64Doc,
 		Filename:         filename,
@@ -227,6 +235,37 @@ func (r *esignRepository) GlobalRequestSign(ctx context.Context, email string, r
 	}
 
 	return &response, nil
+}
+
+func buildMeteraiAnnotation(pos *entity.StampPosition) entity.SignerAnnotation {
+	width, height := pos.Width, pos.Height
+	if width == 0 {
+		width = entity.DefaultStampWidth
+		height = entity.DefaultStampHeight
+	}
+
+	canvasWidth, canvasHeight := pos.CanvasWidth, pos.CanvasHeight
+	if canvasWidth == 0 {
+		canvasWidth = entity.DefaultCanvasWidth
+		canvasHeight = entity.DefaultCanvasHeight
+	}
+
+	page := pos.Page
+	if page == 0 {
+		page = 1
+	}
+
+	return entity.SignerAnnotation{
+		TypeOf:          "meterai",
+		Page:            page,
+		PositionX:       pos.X,
+		PositionY:       pos.Y,
+		ElementWidth:    width,
+		ElementHeight:   height,
+		CanvasWidth:     canvasWidth,
+		CanvasHeight:    canvasHeight,
+		MeteraiProvided: true,
+	}
 }
 
 // calculateSignatureSize returns the appropriate signature element size based on number of signers

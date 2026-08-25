@@ -35,6 +35,9 @@ type DocumentMapping struct {
 	EntryNo          int                      `json:"entry_no"`
 	Signing          bool                     `json:"signing"`
 	Stamping         bool                     `json:"stamping"`
+	// StampInline is true when e-meterai was sent together with request_global_sign.
+	// Webhook must not call /documents/stamp again for these documents.
+	StampInline bool `json:"stamp_inline,omitempty"`
 }
 
 type EsignUsecase interface {
@@ -177,6 +180,11 @@ func (u *esignUsecase) GlobalRequestSign(ctx context.Context, req *entity.Global
 		return u.stampingProcess(ctx, req, entryNo)
 	}
 
+	// signing + stamping in one Mekari request; stamp_positions required
+	if req.Stamping && req.StampPositions == nil {
+		return nil, fmt.Errorf("stamp_positions is required when stamping is enabled")
+	}
+
 	// Validate request
 	if len(req.Signers) == 0 {
 		return nil, fmt.Errorf("at least one signer is required")
@@ -254,6 +262,7 @@ func (u *esignUsecase) saveDocumentAndEntryNoToCache(ctx context.Context, req *e
 		EntryNo:          req.EntryNo,
 		Signing:          req.Signing,
 		Stamping:         req.Stamping,
+		StampInline:      req.Stamping && req.StampPositions != nil,
 	}
 	mappingJSON, _ := json.Marshal(mapping)
 	if err := u.redisClient.Set(ctx, documentKey, string(mappingJSON), 0); err != nil {
@@ -270,6 +279,7 @@ func (u *esignUsecase) saveDocumentAndEntryNoToCache(ctx context.Context, req *e
 			zap.String("email", req.Email),
 			zap.String("invoice_number", req.InvoiceNumber),
 			zap.Bool("has_stamp_positions", req.StampPositions != nil),
+			zap.Bool("stamp_inline", mapping.StampInline),
 		)
 	}
 
